@@ -204,9 +204,14 @@ function ImGuiLib.CreateWindow(windowTitle)
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 and resizing then
-			resizing = false
-			ResizeGrip.TextTransparency = Style.ResizeGrip[2]
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if dragging then
+				dragging = false
+			end
+			if resizing then
+				resizing = false
+				ResizeGrip.TextTransparency = Style.ResizeGrip[2]
+			end
 		end
 	end)
 
