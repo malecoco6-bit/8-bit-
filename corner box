@@ -1,5 +1,5 @@
 -- ==========================================================
--- STANDALONE CORNER BOX ESP & SIDE HEALTH BAR MODULE
+-- COMBINED CORNER BOX & HEALTH BAR ESP MODULE
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -8,6 +8,10 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local ESP_Cache = {}
+
+-- Track feature-specific states based on your checkboxes
+local CornerBoxActive = false
+local HealthBarActive = false
 
 local function createDrawingObjects()
 	local objects = {}
@@ -53,6 +57,16 @@ end)
 
 -- Main Render Loop for ESP Calculations
 RunService.RenderStepped:Connect(function()
+	-- If both features are turned off, skip processing entirely to save performance
+	if not CornerBoxActive and not HealthBarActive then
+		for _, objects in pairs(ESP_Cache) do
+			for _, obj in pairs(objects) do
+				obj.Visible = false
+			end
+		end
+		return
+	end
+
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= LocalPlayer then
 			if not ESP_Cache[player] then
@@ -80,46 +94,58 @@ RunService.RenderStepped:Connect(function()
 						local x = topPos.X - width / 2
 						local y = topPos.Y
 
-						-- Corner Box Calculations
-						local lineLen = math.clamp(width / 4, 4, 12)
-						local corners = {
-							{{Vector2.new(x, y), Vector2.new(x + lineLen, y)}, {Vector2.new(x, y), Vector2.new(x, y + lineLen)}},
-							{{Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)}, {Vector2.new(x + width, y), {x + width, y + lineLen}}},
-							{{Vector2.new(x, y + height), Vector2.new(x + lineLen, y + height)}, {Vector2.new(x, y + height), Vector2.new(x, y + height - lineLen)}},
-							{{Vector2.new(x + width, y + height), Vector2.new(x + width - lineLen, y + height)}, {Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - lineLen)}}
-						}
+						-- Corner Box Logic (Only runs if CornerBox is enabled)
+						if CornerBoxActive then
+							local lineLen = math.clamp(width / 4, 4, 12)
+							local corners = {
+								{{Vector2.new(x, y), Vector2.new(x + lineLen, y)}, {Vector2.new(x, y), Vector2.new(x, y + lineLen)}},
+								{{Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)}, {Vector2.new(x + width, y), {x + width, y + lineLen}}},
+								{{Vector2.new(x, y + height), Vector2.new(x + lineLen, y + height)}, {Vector2.new(x, y + height), Vector2.new(x, y + height - lineLen)}},
+								{{Vector2.new(x + width, y + height), Vector2.new(x + width - lineLen, y + height)}, {Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - lineLen)}}
+							}
 
-						local cKeys = {"TL", "TR", "BL", "BR"}
-						for i, corner in ipairs(corners) do
-							local k = cKeys[i]
+							local cKeys = {"TL", "TR", "BL", "BR"}
+							for i, corner in ipairs(corners) do
+								local k = cKeys[i]
 
-							-- Outlines
-							objects[k.."1_O"].Visible = true
-							objects[k.."1_O"].From, objects[k.."1_O"].To = corner[1][1], corner[1][2]
-							objects[k.."2_O"].Visible = true
-							objects[k.."2_O"].From, objects[k.."2_O"].To = corner[2][1], corner[2][2]
+								-- Outlines
+								objects[k.."1_O"].Visible = true
+								objects[k.."1_O"].From, objects[k.."1_O"].To = corner[1][1], corner[1][2]
+								objects[k.."2_O"].Visible = true
+								objects[k.."2_O"].From, objects[k.."2_O"].To = corner[2][1], corner[2][2]
 
-							-- White Lines
-							objects[k.."1"].Visible = true
-							objects[k.."1"].From, objects[k.."1"].To = corner[1][1], corner[1][2]
-							objects[k.."2"].Visible = true
-							objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
+								-- White Lines
+								objects[k.."1"].Visible = true
+								objects[k.."1"].From, objects[k.."1"].To = corner[1][1], corner[1][2]
+								objects[k.."2"].Visible = true
+								objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
+							end
+						else
+							-- Hide Corner Box lines if disabled
+							for _, name in ipairs({"TL1_O", "TL2_O", "TR1_O", "TR2_O", "BL1_O", "BL2_O", "BR1_O", "BR2_O", "TL1", "TL2", "TR1", "TR2", "BL1", "BL2", "BR1", "BR2"}) do
+								objects[name].Visible = false
+							end
 						end
 
-						-- Health Bar Side ESP Logic
-						local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-						local barX = x - 6
-						local barTopY = y
-						local barBotY = y + height
+						-- Health Bar Side ESP Logic (Only runs if HealthBar is enabled)
+						if HealthBarActive then
+							local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+							local barX = x - 6
+							local barTopY = y
+							local barBotY = y + height
 
-						objects.HealthBarBg.Visible = true
-						objects.HealthBarBg.From = Vector2.new(barX, barTopY)
-						objects.HealthBarBg.To = Vector2.new(barX, barBotY)
+							objects.HealthBarBg.Visible = true
+							objects.HealthBarBg.From = Vector2.new(barX, barTopY)
+							objects.HealthBarBg.To = Vector2.new(barX, barBotY)
 
-						objects.HealthBar.Visible = true
-						objects.HealthBar.From = Vector2.new(barX, barBotY - (height * healthPct))
-						objects.HealthBar.To = Vector2.new(barX, barBotY)
-						objects.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 0, 0), 1 - healthPct)
+							objects.HealthBar.Visible = true
+							objects.HealthBar.From = Vector2.new(barX, barBotY - (height * healthPct))
+							objects.HealthBar.To = Vector2.new(barX, barBotY)
+							objects.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 0, 0), 1 - healthPct)
+						else
+							objects.HealthBarBg.Visible = false
+							objects.HealthBar.Visible = false
+						end
 					else
 						renderESP = false
 					end
@@ -134,3 +160,13 @@ RunService.RenderStepped:Connect(function()
 		end
 	end
 end)
+
+-- Return control functions for your UI checkboxes
+return {
+	CornerBox = function(state)
+		CornerBoxActive = state
+	end,
+	HealthBar = function(state)
+		HealthBarActive = state
+	end
+}
