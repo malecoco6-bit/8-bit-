@@ -1,5 +1,5 @@
 -- ==========================================================
--- COMBINED CORNER BOX & HEALTH BAR ESP MODULE (FIXED)
+-- COMBINED CORNER BOX & HEALTH BAR ESP MODULE (FULLY FIXED)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -57,16 +57,6 @@ end)
 
 -- Main Render Loop for ESP Calculations
 RunService.RenderStepped:Connect(function()
-	-- If both features are turned off, hide everything and skip calculations to save performance
-	if not CornerBoxActive and not HealthBarActive then
-		for _, objects in pairs(ESP_Cache) do
-			for _, obj in pairs(objects) do
-				obj.Visible = false
-			end
-		end
-		return
-	end
-
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= LocalPlayer then
 			if not ESP_Cache[player] then
@@ -108,20 +98,17 @@ RunService.RenderStepped:Connect(function()
 							for i, corner in ipairs(corners) do
 								local k = cKeys[i]
 
-								-- Outlines
 								objects[k.."1_O"].Visible = true
 								objects[k.."1_O"].From, objects[k.."1_O"].To = corner[1][1], corner[1][2]
 								objects[k.."2_O"].Visible = true
 								objects[k.."2_O"].From, objects[k.."2_O"].To = corner[2][1], corner[2][2]
 
-								-- White Lines
 								objects[k.."1"].Visible = true
 								objects[k.."1"].From, objects[k.."1"].To = corner[1][1], corner[1][2]
 								objects[k.."2"].Visible = true
 								objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
 							end
 						else
-							-- Hide only corner box elements if disabled
 							for _, name in ipairs({"TL1_O", "TL2_O", "TR1_O", "TR2_O", "BL1_O", "BL2_O", "BR1_O", "BR2_O", "TL1", "TL2", "TR1", "TR2", "BL1", "BL2", "BR1", "BR2"}) do
 								objects[name].Visible = false
 							end
@@ -152,7 +139,7 @@ RunService.RenderStepped:Connect(function()
 				end
 			end
 
-			-- If out of bounds or dead, cleanly hide everything for this player
+			-- If out of bounds, dead, or no character, hide everything safely
 			if not shouldRender then
 				for _, obj in pairs(objects) do
 					obj.Visible = false
