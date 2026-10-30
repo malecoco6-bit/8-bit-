@@ -1,19 +1,19 @@
 
--- ==========================================================
--- COMBINED CORNER BOX & HEALTH BAR ESP MODULE
--- ==========================================================
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-
 local ESP_Cache = {}
 
--- Toggle states
-local CornerBoxActive = false
-local HealthBarActive = false
+getgenv().Settings = getgenv().Settings or {
+    CornerBoxEnabled = false,
+    HealthBarEnabled = false
+}
+
+local Settings = getgenv().Settings
+
+local CornerBoxActive = Settings.CornerBoxEnabled == true
+local HealthBarActive = Settings.HealthBarEnabled == true
 
 local CornerNames = {
     "TL1_O", "TL2_O", "TR1_O", "TR2_O",
@@ -70,6 +70,10 @@ local function createDrawingObjects()
     return objects
 end
 
+-- ==========================================================
+-- CLEANUP
+-- ==========================================================
+
 local function removePlayerDrawings(player)
     local objects = ESP_Cache[player]
 
@@ -86,196 +90,247 @@ end
 
 Players.PlayerRemoving:Connect(removePlayerDrawings)
 
-local function updatePlayerESP(player, objects)
-    local character = player.Character
-    local humanoid = character
-        and character:FindFirstChildOfClass("Humanoid")
-    local hrp = character
-        and character:FindFirstChild("HumanoidRootPart")
+-- ==========================================================
+-- PROJECT CHARACTER BOUNDING BOX
+-- ==========================================================
 
-    if not character or not humanoid or not hrp
-        or humanoid.Health <= 0
-        or (not CornerBoxActive and not HealthBarActive) then
-        hideObjects(objects)
-        return
-    end
+local function getScreenBounds(character, camera)
+    local cf, size = character:GetBoundingBox()
+    local half = size / 2
 
-    local camera = workspace.CurrentCamera
-    if not camera then
-        hideObjects(objects)
-        return
-    end
+    local corners = {
+        Vector3.new(-half.X, -half.Y, -half.Z),
+        Vector3.new(-half.X, -half.Y,  half.Z),
+        Vector3.new(-half.X,  half.Y, -half.Z),
+        Vector3.new(-half.X,  half.Y,  half.Z),
+        Vector3.new( half.X, -half.Y, -half.Z),
+        Vector3.new( half.X, -half.Y,  half.Z),
+        Vector3.new( half.X,  half.Y, -half.Z),
+        Vector3.new( half.X,  half.Y,  half.Z)
+    }
 
-    local _, onScreen = camera:WorldToViewportPoint(hrp.Position)
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
 
-    if not onScreen then
-        hideObjects(objects)
-        return
-    end
+    for _, offset in ipairs(corners) do
+        local worldPosition = cf:PointToWorldSpace(offset)
+        local screenPosition =
+            camera:WorldToViewportPoint(worldPosition)
 
-    local success, cf, size = pcall(function()
-        return character:GetBoundingBox()
-    end)
-
-    if not success then
-        hideObjects(objects)
-        return
-    end
-
-    local topPos, topVisible = camera:WorldToViewportPoint(
-        (cf + Vector3.new(0, size.Y / 2, 0)).Position
-    )
-
-    local bottomPos, bottomVisible = camera:WorldToViewportPoint(
-        (cf - Vector3.new(0, size.Y / 2, 0)).Position
-    )
-
-    if not topVisible or not bottomVisible then
-        hideObjects(objects)
-        return
-    end
-
-    local height = math.abs(bottomPos.Y - topPos.Y)
-
-    if height <= 0 then
-        hideObjects(objects)
-        return
-    end
-
-    local width = height / 2
-    local x = topPos.X - width / 2
-    local y = topPos.Y
-
-    -- Corner Box ESP
-    if CornerBoxActive then
-        local lineLen = math.clamp(width / 4, 4, 12)
-
-        local corners = {
-            {
-                {Vector2.new(x, y), Vector2.new(x + lineLen, y)},
-                {Vector2.new(x, y), Vector2.new(x, y + lineLen)}
-            },
-            {
-                {Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)},
-                {Vector2.new(x + width, y), Vector2.new(x + width, y + lineLen)}
-            },
-            {
-                {Vector2.new(x, y + height), Vector2.new(x + lineLen, y + height)},
-                {Vector2.new(x, y + height), Vector2.new(x, y + height - lineLen)}
-            },
-            {
-                {Vector2.new(x + width, y + height), Vector2.new(x + width - lineLen, y + height)},
-                {Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - lineLen)}
-            }
-        }
-
-        local cornerKeys = {"TL", "TR", "BL", "BR"}
-
-        for i, corner in ipairs(corners) do
-            local key = cornerKeys[i]
-
-            for j = 1, 2 do
-                local outline = objects[key .. j .. "_O"]
-                local foreground = objects[key .. j]
-
-                outline.From = corner[j][1]
-                outline.To = corner[j][2]
-                outline.Visible = true
-
-                foreground.From = corner[j][1]
-                foreground.To = corner[j][2]
-                foreground.Visible = true
-            end
+        if screenPosition.Z <= 0 then
+            return nil
         end
-    else
+
+        minX = math.min(minX, screenPosition.X)
+        minY = math.min(minY, screenPosition.Y)
+        maxX = math.max(maxX, screenPosition.X)
+        maxY = math.max(maxY, screenPosition.Y)
+    end
+
+    local width = maxX - minX
+    local height = maxY - minY
+
+    if width < 1 or height < 1 then
+        return nil
+    end
+
+    return minX, minY, maxX, maxY, width, height
+end
+
+-- ==========================================================
+-- CORNER BOX
+-- ==========================================================
+
+local function updateCornerBox(objects, x, y, width, height)
+    if not CornerBoxActive then
         for _, name in ipairs(CornerNames) do
             objects[name].Visible = false
         end
+        return
     end
 
-    -- Health Bar Side ESP
-    if HealthBarActive then
-        local maxHealth = humanoid.MaxHealth
+    local lineLen = math.clamp(
+        math.min(width, height) * 0.22,
+        4,
+        14
+    )
 
-        if maxHealth > 0 then
-            local healthPct = math.clamp(
-                humanoid.Health / maxHealth, 0, 1
-            )
+    local left = x
+    local top = y
+    local right = x + width
+    local bottom = y + height
 
-            local barX = x - 6
-            local barTopY = y
-            local barBottomY = y + height
+    local corners = {
+        {
+            {Vector2.new(left, top),
+             Vector2.new(left + lineLen, top)},
+            {Vector2.new(left, top),
+             Vector2.new(left, top + lineLen)}
+        },
+        {
+            {Vector2.new(right, top),
+             Vector2.new(right - lineLen, top)},
+            {Vector2.new(right, top),
+             Vector2.new(right, top + lineLen)}
+        },
+        {
+            {Vector2.new(left, bottom),
+             Vector2.new(left + lineLen, bottom)},
+            {Vector2.new(left, bottom),
+             Vector2.new(left, bottom - lineLen)}
+        },
+        {
+            {Vector2.new(right, bottom),
+             Vector2.new(right - lineLen, bottom)},
+            {Vector2.new(right, bottom),
+             Vector2.new(right, bottom - lineLen)}
+        }
+    }
 
-            objects.HealthBarBg.From =
-                Vector2.new(barX, barTopY)
-            objects.HealthBarBg.To =
-                Vector2.new(barX, barBottomY)
-            objects.HealthBarBg.Visible = true
+    local keys = {"TL", "TR", "BL", "BR"}
 
-            objects.HealthBar.From = Vector2.new(
-                barX,
-                barBottomY - height * healthPct
-            )
-            objects.HealthBar.To =
-                Vector2.new(barX, barBottomY)
+    for i, corner in ipairs(corners) do
+        local key = keys[i]
 
-            objects.HealthBar.Color =
-                Color3.fromRGB(0, 255, 0):Lerp(
-                    Color3.fromRGB(255, 0, 0),
-                    1 - healthPct
-                )
+        for j = 1, 2 do
+            local from = corner[j][1]
+            local to = corner[j][2]
 
-            objects.HealthBar.Visible = true
-        else
-            objects.HealthBarBg.Visible = false
-            objects.HealthBar.Visible = false
+            local outline = objects[key .. j .. "_O"]
+            local foreground = objects[key .. j]
+
+            outline.From = from
+            outline.To = to
+            outline.Visible = true
+
+            foreground.From = from
+            foreground.To = to
+            foreground.Visible = true
         end
-    else
-        objects.HealthBarBg.Visible = false
-        objects.HealthBar.Visible = false
     end
 end
 
--- Main render connection
+-- ==========================================================
+-- HEALTH BAR
+-- ==========================================================
+
+local function updateHealthBar(objects, x, y, height, humanoid)
+    if not HealthBarActive or humanoid.MaxHealth <= 0 then
+        objects.HealthBarBg.Visible = false
+        objects.HealthBar.Visible = false
+        return
+    end
+
+    local healthPct = math.clamp(
+        humanoid.Health / humanoid.MaxHealth,
+        0,
+        1
+    )
+
+    local barX = x - 5
+    local bottomY = y + height
+
+    objects.HealthBarBg.From = Vector2.new(barX, y)
+    objects.HealthBarBg.To = Vector2.new(barX, bottomY)
+    objects.HealthBarBg.Visible = true
+
+    objects.HealthBar.From = Vector2.new(
+        barX,
+        bottomY - height * healthPct
+    )
+
+    objects.HealthBar.To = Vector2.new(barX, bottomY)
+
+    objects.HealthBar.Color =
+        Color3.fromRGB(255, 0, 0):Lerp(
+            Color3.fromRGB(0, 255, 0),
+            healthPct
+        )
+
+    objects.HealthBar.Visible = true
+end
+
+-- ==========================================================
+-- RENDER LOOP
+-- ==========================================================
+
 local RenderConnection = RunService.RenderStepped:Connect(function()
+    local camera = workspace.CurrentCamera
+
+    if not camera then
+        return
+    end
+
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            if not ESP_Cache[player] then
-                local success, result = pcall(createDrawingObjects)
+        if player == LocalPlayer then
+            continue
+        end
 
-                if success then
-                    ESP_Cache[player] = result
-                else
-                    warn("ESP drawing creation failed: " .. tostring(result))
-                end
-            end
+        if not ESP_Cache[player] then
+            local success, result = pcall(createDrawingObjects)
 
-            local objects = ESP_Cache[player]
-
-            if objects then
-                local success, err = pcall(function()
-                    updatePlayerESP(player, objects)
-                end)
-
-                if not success then
-                    hideObjects(objects)
-                    warn("ESP update failed: " .. tostring(err))
-                end
+            if success then
+                ESP_Cache[player] = result
+            else
+                warn("ESP creation error: " .. tostring(result))
+                continue
             end
         end
+
+        local objects = ESP_Cache[player]
+        local character = player.Character
+
+        local humanoid = character
+            and character:FindFirstChildOfClass("Humanoid")
+
+        if not character or not humanoid
+            or humanoid.Health <= 0
+            or (not CornerBoxActive and not HealthBarActive) then
+            hideObjects(objects)
+            continue
+        end
+
+        local success, x, y, right, bottom, width, height =
+            pcall(function()
+                return getScreenBounds(character, camera)
+            end)
+
+        if not success or not x then
+            hideObjects(objects)
+            continue
+        end
+
+        local viewport = camera.ViewportSize
+
+        if right < 0 or x > viewport.X
+            or bottom < 0 or y > viewport.Y then
+            hideObjects(objects)
+            continue
+        end
+
+        updateCornerBox(objects, x, y, width, height)
+        updateHealthBar(objects, x, y, height, humanoid)
     end
 end)
 
--- ==========================================================
--- UI CONTROL FUNCTIONS
--- ==========================================================
+local function setCornerBox(state)
+    CornerBoxActive = state == true
+    Settings.CornerBoxEnabled = CornerBoxActive
+end
 
-return {
-    CornerBox = function(state)
-        CornerBoxActive = state == true
-    end,
+local function setHealthBar(state)
+    HealthBarActive = state == true
+    Settings.HealthBarEnabled = HealthBarActive
+end
 
-    HealthBar = function(state)
-        HealthBarActive = state == true
-    end
-}
+VisualTab:AddCheckbox(
+    "Corner Box ESP",
+    CornerBoxActive,
+    setCornerBox
+)
+
+VisualTab:AddCheckbox(
+    "Health Bar Side ESP",
+    HealthBarActive,
+    setHealthBar
+)
