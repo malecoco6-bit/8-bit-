@@ -1,0 +1,290 @@
+-- M9 Gun (Local Script)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+local MESH_ID = "rbxassetid://542124581"
+local TEXTURE_ID = "rbxassetid://542125034"
+local TARGET_SIZE = Vector3.new(2.2, 9, 20)
+
+local MESH_ROTATION = CFrame.Angles(0, math.rad(180), 0)
+local MUZZLE_FORWARD_OFFSET = 0.3
+local CUSTOM_SOUND_ID = "rbxassetid://11944350"
+
+-- Restricted strictly to "M9" only
+local TOOL_NAMES = {
+    ["M9"] = true
+}
+
+local originalFireRates = setmetatable({}, {__mode = "k"})
+local originalAutoFires = setmetatable({}, {__mode = "k"})
+local originalSoundIds = setmetatable({}, {__mode = "k"})
+local processedM9 = setmetatable({}, {__mode = "k"})
+
+-- Spawns the tracer strictly inside the local client's camera viewport (Client-Side Only)
+local function spawnLocalNeonTracer(origin, target)
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    local distance = (origin - target).Magnitude
+    if distance <= 0 then return end
+
+    local tracer = Instance.new("Part")
+    tracer.Name = "LocalNeonTracer"
+    tracer.Anchored = true
+    tracer.CanCollide = false
+    tracer.CanTouch = false
+    tracer.CanQuery = false
+    tracer.CastShadow = false
+    tracer.Material = Enum.Material.Neon
+    tracer.Color = Color3.fromRGB(255, 0, 0)
+    tracer.Size = Vector3.new(0.05, 0.05, distance)
+    tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
+    tracer.Parent = camera -- Parents to camera so only you can see it
+
+    task.spawn(function()
+        for i = 1, 10 do
+            if not tracer.Parent then break end
+            tracer.Transparency = i / 10
+            task.wait(0.015)
+        end
+        tracer:Destroy()
+    end)
+end
+
+-- Strictly checks if the firing origin belongs to YOUR M9 tool specifically
+local function IsLocalPlayerFiring(origin)
+    local character = player.Character
+    if not character then return false end
+
+    local tool = character:FindFirstChildOfClass("Tool")
+    if tool and tool.Name == "M9" then
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local head = character:FindFirstChild("Head")
+        
+        if rootPart and (rootPart.Position - origin).Magnitude < 12 then
+            return true
+        end
+        if head and (head.Position - origin).Magnitude < 12 then
+            return true
+        end
+
+        local handle = tool:FindFirstChild("Handle")
+        if handle and (handle.Position - origin).Magnitude < 8 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local successGunTracers, GunTracers = pcall(function()
+    return require(
+        ReplicatedStorage:WaitForChild("SharedModules")
+            :WaitForChild("GunTracers")
+    )
+end)
+
+if successGunTracers and GunTracers then
+    if rawget(GunTracers, "createBullet") then
+        local old = GunTracers.createBullet
+        GunTracers.createBullet = function(origin, target, ...)
+            if IsLocalPlayerFiring(origin) then
+                spawnLocalNeonTracer(origin, target)
+                return
+            end
+            return old(origin, target, ...)
+        end
+    end
+
+    if rawget(GunTracers, "createSniper") then
+        local oldSniper = GunTracers.createSniper
+        GunTracers.createSniper = function(origin, target, ...)
+            if IsLocalPlayerFiring(origin) then
+                spawnLocalNeonTracer(origin, target)
+                return
+            end
+            return oldSniper(origin, target, ...)
+        end
+    end
+
+    if rawget(GunTracers, "createTaser") then
+        local oldTaser = GunTracers.createTaser
+        GunTracers.createTaser = function(origin, target, ...)
+            if IsLocalPlayerFiring(origin) then
+                spawnLocalNeonTracer(origin, target)
+                return
+            end
+            return oldTaser(origin, target, ...)
+        end
+    end
+end
+
+local function applySoundToTool(tool)
+    if not TOOL_NAMES[tool.Name] then return end
+
+    local handle = tool:FindFirstChild("Handle")
+        or tool:WaitForChild("Handle", 5)
+
+    if not handle then return end
+
+    local sound = handle:FindFirstChild("ShootSound")
+    if sound and sound:IsA("Sound") then
+        if originalSoundIds[sound] == nil then
+            originalSoundIds[sound] = sound.SoundId
+        end
+
+        sound.SoundId = CUSTOM_SOUND_ID
+    end
+end
+
+local function changeM9Mesh(tool)
+    local character = player.Character
+    local backpack = player:WaitForChild("Backpack")
+
+    tool = tool
+        or (character and character:FindFirstChild("M9"))
+        or backpack:FindFirstChild("M9")
+
+    if not tool then return end
+
+    local mesh = tool:FindFirstChild("Meshes/M9_3", true)
+    local handle = tool:FindFirstChild("Handle")
+    local muzzle = tool:FindFirstChild("Muzzle", true)
+
+    if not mesh or not mesh:IsA("MeshPart") then return end
+    if not handle or not handle:IsA("BasePart") then return end
+
+    pcall(function()
+        applySoundToTool(tool)
+
+        mesh.MeshId = MESH_ID
+        mesh.TextureID = TEXTURE_ID
+        mesh.Size = TARGET_SIZE
+
+        local relativeCFrame = handle.CFrame:ToObjectSpace(mesh.CFrame)
+
+        for _, obj in ipairs(tool:GetDescendants()) do
+            if obj:IsA("WeldConstraint")
+                and (
+                    (obj.Part0 == handle and obj.Part1 == mesh)
+                    or (obj.Part1 == handle and obj.Part0 == mesh)
+                ) then
+                obj:Destroy()
+            end
+        end
+
+        mesh.CFrame = handle.CFrame * relativeCFrame * MESH_ROTATION
+
+        local weld = Instance.new("Weld")
+        weld.Name = "M9MeshOrientationWeld"
+        weld.Part0 = handle
+        weld.Part1 = mesh
+        weld.C0 = handle.CFrame:ToObjectSpace(mesh.CFrame)
+        weld.C1 = CFrame.identity
+        weld.Parent = handle
+
+        if muzzle and muzzle:IsA("BasePart") then
+            local oldRelativeCFrame =
+                handle.CFrame:ToObjectSpace(muzzle.CFrame)
+
+            local oldWelds = {}
+
+            for _, obj in ipairs(handle:GetChildren()) do
+                if obj:IsA("WeldConstraint")
+                    and (
+                        (obj.Part0 == handle and obj.Part1 == muzzle)
+                        or (obj.Part1 == handle and obj.Part0 == muzzle)
+                    ) then
+                    table.insert(oldWelds, obj)
+                end
+            end
+
+            for _, oldWeld in ipairs(oldWelds) do
+                oldWeld:Destroy()
+            end
+
+            local newRelativeCFrame =
+                oldRelativeCFrame
+                * CFrame.new(0, 0, -MUZZLE_FORWARD_OFFSET)
+
+            muzzle.CFrame = handle.CFrame * newRelativeCFrame
+
+            local newWeld = Instance.new("WeldConstraint")
+            newWeld.Name = "MuzzlePositionWeld"
+            newWeld.Part0 = handle
+            newWeld.Part1 = muzzle
+            newWeld.Parent = handle
+        end
+    end)
+end
+
+local function enableRapidFire(tool)
+    if not tool or not TOOL_NAMES[tool.Name] then return end
+
+    if originalFireRates[tool] == nil then
+        originalFireRates[tool] = tool:GetAttribute("FireRate") or 0.5
+    end
+
+    if originalAutoFires[tool] == nil then
+        originalAutoFires[tool] = tool:GetAttribute("AutoFire") or false
+    end
+
+    tool:SetAttribute("FireRate", 0.08)
+    tool:SetAttribute("AutoFire", true)
+end
+
+local function applyM9Once(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    if not TOOL_NAMES[tool.Name] then return end
+    if processedM9[tool] then
+        enableRapidFire(tool)
+        return
+    end
+
+    changeM9Mesh(tool)
+
+    processedM9[tool] = true
+    enableRapidFire(tool)
+end
+
+local function watchContainer(container)
+    container.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") and TOOL_NAMES[child.Name] then
+            task.delay(0.5, function()
+                if child.Parent then
+                    applyM9Once(child)
+                end
+            end)
+        end
+    end)
+
+    for _, child in ipairs(container:GetChildren()) do
+        if child:IsA("Tool") and TOOL_NAMES[child.Name] then
+            task.defer(function()
+                applyM9Once(child)
+            end)
+        end
+    end
+end
+
+local backpack = player:WaitForChild("Backpack")
+watchContainer(backpack)
+
+local function onCharacterAdded(character)
+    watchContainer(character)
+
+    task.delay(1, function()
+        local tool = character:FindFirstChild("M9")
+        if tool then
+            applyM9Once(tool)
+        end
+    end)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+if player.Character then
+    onCharacterAdded(player.Character)
+end
