@@ -1,18 +1,15 @@
 -- ==========================================================
 -- DEAR IMGUI-STYLE ROBLOX UI LIBRARY
--- Standalone Module for loadstring
+-- Reusable GUI library: Window, Tabs, Checkboxes, Sliders, Dropdowns
 -- ==========================================================
 
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
 
-local ImGuiLib = {}
-ImGuiLib.__index = ImGuiLib
-
--- ==========================================================
--- STYLE
--- ==========================================================
+if CoreGui:FindFirstChild("ImGuiCustomLib") then
+    CoreGui.ImGuiCustomLib:Destroy()
+end
 
 local Style = {
     Font = Enum.Font.Code,
@@ -24,7 +21,6 @@ local Style = {
     FramePaddingX = 4,
 
     Text = Color3.fromRGB(255, 255, 255),
-
     WindowBg = {Color3.fromRGB(15, 15, 15), 0.06},
     PopupBg = {Color3.fromRGB(20, 20, 20), 0.06},
     Border = {Color3.fromRGB(110, 110, 128), 0.5},
@@ -56,17 +52,11 @@ local Style = {
     ResizeGripActive = {Color3.fromRGB(66, 150, 250), 0.05},
 }
 
--- ==========================================================
--- HELPERS
--- ==========================================================
-
 local function create(className, properties, parent)
     local instance = Instance.new(className)
-
     for key, value in pairs(properties) do
         instance[key] = value
     end
-
     instance.Parent = parent
     return instance
 end
@@ -86,46 +76,32 @@ local function label(parent, properties)
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
     }
-
     for key, value in pairs(properties) do
         props[key] = value
     end
-
     return create("TextLabel", props, parent)
 end
 
 local function isInside(guiObject, point)
-    local position = guiObject.AbsolutePosition
-    local size = guiObject.AbsoluteSize
-
-    return point.X >= position.X
-        and point.X <= position.X + size.X
-        and point.Y >= position.Y
-        and point.Y <= position.Y + size.Y
+    local position, size = guiObject.AbsolutePosition, guiObject.AbsoluteSize
+    return point.X >= position.X and point.X <= position.X + size.X
+        and point.Y >= position.Y and point.Y <= position.Y + size.Y
 end
 
 local function drawLine(parent, a, b, thickness, color)
     local delta = b - a
-
     create("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromOffset(
-            (a.X + b.X) / 2,
-            (a.Y + b.Y) / 2
-        ),
-        Size = UDim2.fromOffset(
-            delta.Magnitude + thickness * 0.5,
-            thickness
-        ),
+        Position = UDim2.fromOffset((a.X + b.X) / 2, (a.Y + b.Y) / 2),
+        Size = UDim2.fromOffset(delta.Magnitude + thickness * 0.5, thickness),
         Rotation = math.deg(math.atan2(delta.Y, delta.X)),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
     }, parent)
 end
 
--- ==========================================================
--- WINDOW
--- ==========================================================
+local ImGuiLib = {}
+ImGuiLib.__index = ImGuiLib
 
 function ImGuiLib.new(windowTitle)
     local self = setmetatable({}, ImGuiLib)
@@ -138,11 +114,6 @@ function ImGuiLib.new(windowTitle)
     self.ClosePopups = {}
     self.ActiveTabContent = nil
 
-    local old = CoreGui:FindFirstChild("ImGuiCustomLib")
-    if old then
-        old:Destroy()
-    end
-
     self.ScreenGui = create("ScreenGui", {
         Name = "ImGuiCustomLib",
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -152,13 +123,9 @@ function ImGuiLib.new(windowTitle)
 
     self.MainFrame = create("Frame", {
         Size = UDim2.fromOffset(self.Size.X, self.Size.Y),
-        Position = UDim2.new(
-            0.5, -self.Size.X / 2,
-            0.5, -self.Size.Y / 2
-        ),
+        Position = UDim2.new(0.5, -self.Size.X / 2, 0.5, -self.Size.Y / 2),
         BorderSizePixel = 0,
     }, self.ScreenGui)
-
     paint(self.MainFrame, Style.WindowBg)
 
     create("UIStroke", {
@@ -172,7 +139,6 @@ function ImGuiLib.new(windowTitle)
         Size = UDim2.new(1, 0, 0, TITLE_H),
         BorderSizePixel = 0,
     }, self.MainFrame)
-
     paint(self.TopBar, Style.TitleBgActive)
 
     local CollapseButton = create("TextButton", {
@@ -200,14 +166,8 @@ function ImGuiLib.new(windowTitle)
     }, self.MainFrame)
 
     self.TabBar = create("Frame", {
-        Position = UDim2.fromOffset(
-            Style.WindowPadding,
-            Style.WindowPadding
-        ),
-        Size = UDim2.new(
-            1, -Style.WindowPadding * 2,
-            0, Style.FrameHeight
-        ),
+        Position = UDim2.fromOffset(Style.WindowPadding, Style.WindowPadding),
+        Size = UDim2.new(1, -Style.WindowPadding * 2, 0, Style.FrameHeight),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
     }, self.Body)
@@ -219,19 +179,11 @@ function ImGuiLib.new(windowTitle)
     }, self.TabBar)
 
     local tabLineY = Style.WindowPadding + Style.FrameHeight
-
     local TabLine = create("Frame", {
-        Position = UDim2.fromOffset(
-            Style.WindowPadding,
-            tabLineY
-        ),
-        Size = UDim2.new(
-            1, -Style.WindowPadding * 2,
-            0, 1
-        ),
+        Position = UDim2.fromOffset(Style.WindowPadding, tabLineY),
+        Size = UDim2.new(1, -Style.WindowPadding * 2, 0, 1),
         BorderSizePixel = 0,
     }, self.Body)
-
     paint(TabLine, Style.TabActive)
 
     self.ContentTop = tabLineY + 1
@@ -251,9 +203,7 @@ function ImGuiLib.new(windowTitle)
         ZIndex = 50,
     }, self.Body)
 
-    local resizing = false
-    local resizeStart
-    local sizeStart
+    local resizing, resizeStart, sizeStart = false, nil, nil
 
     ResizeGrip.MouseEnter:Connect(function()
         if not resizing then
@@ -270,10 +220,7 @@ function ImGuiLib.new(windowTitle)
     ResizeGrip.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             resizing = true
-            resizeStart = Vector2.new(
-                input.Position.X,
-                input.Position.Y
-            )
+            resizeStart = Vector2.new(input.Position.X, input.Position.Y)
             sizeStart = self.Size
             ResizeGrip.TextTransparency = Style.ResizeGripActive[2]
         end
@@ -284,18 +231,9 @@ function ImGuiLib.new(windowTitle)
     local function setCollapsed(value)
         isCollapsed = value
         CollapseButton.Text = isCollapsed and "▶" or "▼"
-
-        paint(
-            self.TopBar,
-            isCollapsed and Style.TitleBgCollapsed
-                or Style.TitleBgActive
-        )
-
+        paint(self.TopBar, isCollapsed and Style.TitleBgCollapsed or Style.TitleBgActive)
         self.Body.Visible = not isCollapsed
-
-        self.MainFrame.BackgroundTransparency =
-            isCollapsed and 1 or Style.WindowBg[2]
-
+        self.MainFrame.BackgroundTransparency = isCollapsed and 1 or Style.WindowBg[2]
         self.MainFrame.Size = isCollapsed
             and UDim2.fromOffset(self.Size.X, TITLE_H)
             or UDim2.fromOffset(self.Size.X, self.Size.Y)
@@ -309,16 +247,13 @@ function ImGuiLib.new(windowTitle)
         setCollapsed(not isCollapsed)
     end)
 
-    local dragging = false
-    local dragStart
-    local startPos
+    local dragging, dragStart, startPos
 
     self.TopBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPos = self.MainFrame.Position
-
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -334,29 +269,19 @@ function ImGuiLib.new(windowTitle)
 
         if dragging then
             local delta = input.Position - dragStart
-
             self.MainFrame.Position = UDim2.new(
                 startPos.X.Scale,
                 startPos.X.Offset + delta.X,
                 startPos.Y.Scale,
                 startPos.Y.Offset + delta.Y
             )
-
         elseif resizing then
-            local delta = Vector2.new(
-                input.Position.X,
-                input.Position.Y
-            ) - resizeStart
-
+            local delta = Vector2.new(input.Position.X, input.Position.Y) - resizeStart
             self.Size = Vector2.new(
                 math.max(MIN_SIZE.X, sizeStart.X + delta.X),
                 math.max(MIN_SIZE.Y, sizeStart.Y + delta.Y)
             )
-
-            self.MainFrame.Size = UDim2.fromOffset(
-                self.Size.X,
-                self.Size.Y
-            )
+            self.MainFrame.Size = UDim2.fromOffset(self.Size.X, self.Size.Y)
 
             for _, closePopup in ipairs(self.ClosePopups) do
                 closePopup()
@@ -365,29 +290,18 @@ function ImGuiLib.new(windowTitle)
     end)
 
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-
-            if resizing then
-                resizing = false
-                ResizeGrip.TextTransparency = Style.ResizeGrip[2]
-            end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and resizing then
+            resizing = false
+            ResizeGrip.TextTransparency = Style.ResizeGrip[2]
         end
     end)
 
     return self
 end
 
--- ==========================================================
--- TABS
--- ==========================================================
-
 function ImGuiLib:AddTab(tabName)
     local window = self
-    local tab = {
-        Active = false,
-        Hovered = false,
-    }
+    local tab = {Active = false, Hovered = false}
 
     local textWidth = TextService:GetTextSize(
         tabName,
@@ -397,10 +311,7 @@ function ImGuiLib:AddTab(tabName)
     ).X
 
     tab.Button = create("TextButton", {
-        Size = UDim2.fromOffset(
-            textWidth + 12,
-            Style.FrameHeight
-        ),
+        Size = UDim2.fromOffset(textWidth + 12, Style.FrameHeight),
         BorderSizePixel = 0,
         AutoButtonColor = false,
         Text = "",
@@ -428,17 +339,13 @@ function ImGuiLib:AddTab(tabName)
     local function refreshColor()
         local pair = tab.Active and Style.TabActive
             or (tab.Hovered and Style.TabHovered or Style.Tab)
-
         paint(tab.Button, pair)
         paint(tab.Filler, pair)
     end
 
     local TabContent = create("ScrollingFrame", {
         Position = UDim2.fromOffset(0, window.ContentTop),
-        Size = UDim2.new(
-            1, 0,
-            1, -window.ContentTop
-        ),
+        Size = UDim2.new(1, 0, 1, -window.ContentTop),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.new(),
@@ -502,10 +409,6 @@ function ImGuiLib:AddTab(tabName)
 
     local tabProxy = {}
 
-    -- ======================================================
-    -- CHECKBOX
-    -- ======================================================
-
     function tabProxy:AddCheckbox(name, defaultState, callback)
         local toggled = defaultState or false
         local size = Style.FrameHeight
@@ -522,7 +425,6 @@ function ImGuiLib:AddTab(tabName)
             Size = UDim2.fromOffset(size, size),
             BorderSizePixel = 0,
         }, Row)
-
         paint(Box, Style.FrameBg)
 
         local Check = create("Frame", {
@@ -536,24 +438,16 @@ function ImGuiLib:AddTab(tabName)
         local p1 = Vector2.new(3, 10) * scale
         local p2 = Vector2.new(7.7, 14.7) * scale
         local p3 = Vector2.new(17.1, 5.3) * scale
-
         drawLine(Check, p1, p2, 2, Style.CheckMark)
         drawLine(Check, p2, p3, 2, Style.CheckMark)
 
         label(Row, {
-            Position = UDim2.fromOffset(
-                size + Style.ItemInnerSpacing,
-                0
-            ),
-            Size = UDim2.new(
-                1, -(size + Style.ItemInnerSpacing),
-                1, 0
-            ),
+            Position = UDim2.fromOffset(size + Style.ItemInnerSpacing, 0),
+            Size = UDim2.new(1, -(size + Style.ItemInnerSpacing), 1, 0),
             Text = name,
         })
 
-        local hovered = false
-        local pressed = false
+        local hovered, pressed = false, false
 
         local function refreshBox()
             paint(
@@ -569,8 +463,7 @@ function ImGuiLib:AddTab(tabName)
         end)
 
         Row.MouseLeave:Connect(function()
-            hovered = false
-            pressed = false
+            hovered, pressed = false, false
             refreshBox()
         end)
 
@@ -587,7 +480,6 @@ function ImGuiLib:AddTab(tabName)
         Row.MouseButton1Click:Connect(function()
             toggled = not toggled
             Check.Visible = toggled
-
             if callback then
                 pcall(callback, toggled)
             end
@@ -596,22 +488,7 @@ function ImGuiLib:AddTab(tabName)
         return Row
     end
 
-    -- ======================================================
-    -- SLIDER
-    -- ======================================================
-
-    function tabProxy:AddArrowSlider(
-        name,
-        min,
-        max,
-        defaultVal,
-        step,
-        callback
-    )
-        -- Supports both:
-        -- AddArrowSlider(name, min, max, default, callback)
-        -- AddArrowSlider(name, min, max, default, step, callback)
-
+    function tabProxy:AddArrowSlider(name, min, max, defaultVal, step, callback)
         if type(step) == "function" and callback == nil then
             callback = step
             step = 1
@@ -619,12 +496,9 @@ function ImGuiLib:AddTab(tabName)
 
         step = step or 1
 
-        assert(max > min, "Slider max must be greater than min")
-        assert(step > 0, "Slider step must be greater than zero")
-
         local value = math.clamp(defaultVal or min, min, max)
         local frameH = Style.FrameHeight
-        local range = max - min
+        local range = math.max(max - min, 1)
 
         local Row = create("Frame", {
             Size = UDim2.new(1, 0, 0, frameH),
@@ -638,7 +512,6 @@ function ImGuiLib:AddTab(tabName)
             AutoButtonColor = false,
             Text = "",
         }, Row)
-
         paint(Track, Style.FrameBg)
 
         local Grab = create("Frame", {
@@ -655,47 +528,32 @@ function ImGuiLib:AddTab(tabName)
         })
 
         label(Row, {
-            Position = UDim2.new(
-                0.65, Style.ItemInnerSpacing,
-                0, 0
-            ),
-            Size = UDim2.new(
-                0.35, -Style.ItemInnerSpacing,
-                1, 0
-            ),
+            Position = UDim2.new(0.65, Style.ItemInnerSpacing, 0, 0),
+            Size = UDim2.new(0.35, -Style.ItemInnerSpacing, 1, 0),
             Text = name,
         })
 
         local function metrics()
             local usable = math.max(Track.AbsoluteSize.X - 4, 1)
-            local grabWidth = math.max(
-                usable / (range / step + 1),
-                12
-            )
-
-            grabWidth = math.min(grabWidth, usable)
-
+            local grabWidth = math.max(usable / (max - min + 1), 12)
             return usable, grabWidth
         end
 
         local function refresh()
             local usable, grabWidth = metrics()
             local alpha = (value - min) / range
-
             Grab.Size = UDim2.fromOffset(grabWidth, frameH - 4)
             Grab.Position = UDim2.fromOffset(
                 2 + (usable - grabWidth) * alpha,
                 2
             )
-
             ValueText.Text = tostring(value)
         end
 
         Track:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
         refresh()
 
-        local hovered = false
-        local dragging = false
+        local hovered, dragging = false, false
 
         local function refreshColors()
             paint(
@@ -703,7 +561,6 @@ function ImGuiLib:AddTab(tabName)
                 dragging and Style.FrameBgActive
                     or (hovered and Style.FrameBgHovered or Style.FrameBg)
             )
-
             Grab.BackgroundColor3 = dragging
                 and Style.SliderGrabActive
                 or Style.SliderGrab
@@ -712,28 +569,23 @@ function ImGuiLib:AddTab(tabName)
         local function setFromMouse(mouseX)
             local usable, grabWidth = metrics()
             local travel = usable - grabWidth
-
             if travel <= 0 then
                 return
             end
 
             local alpha = math.clamp(
-                (mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2)
-                    / travel,
+                (mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2) / travel,
                 0,
                 1
             )
 
             local rawValue = min + alpha * range
-            local newValue = min
-                + math.floor((rawValue - min) / step + 0.5) * step
-
+            local newValue = min + math.floor((rawValue - min) / step + 0.5) * step
             newValue = math.clamp(newValue, min, max)
 
             if newValue ~= value then
                 value = newValue
                 refresh()
-
                 if callback then
                     pcall(callback, value)
                 end
@@ -775,11 +627,6 @@ function ImGuiLib:AddTab(tabName)
     end
 
     tabProxy.AddSlider = tabProxy.AddArrowSlider
-
-    -- ======================================================
-    -- DROPDOWN
-    -- ORIGINAL IMPLEMENTATION — UNCHANGED
-    -- ======================================================
 
     function tabProxy:AddDropdown(name, options, defaultOption, callback)
         local selected = defaultOption or options[1]
@@ -863,11 +710,8 @@ function ImGuiLib:AddTab(tabName)
         local function refreshCombo()
             paint(
                 Combo,
-                (comboHovered or open)
-                    and Style.FrameBgHovered
-                    or Style.FrameBg
+                (comboHovered or open) and Style.FrameBgHovered or Style.FrameBg
             )
-
             paint(
                 ArrowButton,
                 comboHovered and Style.ButtonHovered or Style.Button
@@ -879,18 +723,14 @@ function ImGuiLib:AddTab(tabName)
 
             if open then
                 local main = window.MainFrame
-
                 Popup.Position = UDim2.fromOffset(
                     Combo.AbsolutePosition.X - main.AbsolutePosition.X,
-                    Combo.AbsolutePosition.Y + Combo.AbsoluteSize.Y
-                        - main.AbsolutePosition.Y
+                    Combo.AbsolutePosition.Y + Combo.AbsoluteSize.Y - main.AbsolutePosition.Y
                 )
-
                 Popup.Size = UDim2.fromOffset(
                     Combo.AbsoluteSize.X,
                     #options * itemH + popupPad * 2
                 )
-
                 refreshItems()
             end
 
@@ -899,16 +739,10 @@ function ImGuiLib:AddTab(tabName)
         end
 
         for index, option in ipairs(options) do
-            local item = {
-                Option = option,
-                Hovered = false,
-            }
+            local item = {Option = option, Hovered = false}
 
             item.Button = create("TextButton", {
-                Position = UDim2.fromOffset(
-                    0,
-                    popupPad + (index - 1) * itemH
-                ),
+                Position = UDim2.fromOffset(0, popupPad + (index - 1) * itemH),
                 Size = UDim2.new(1, 0, 0, itemH),
                 BackgroundTransparency = 1,
                 BorderSizePixel = 0,
@@ -965,13 +799,8 @@ function ImGuiLib:AddTab(tabName)
 
         UserInputService.InputBegan:Connect(function(input)
             if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local point = Vector2.new(
-                    input.Position.X,
-                    input.Position.Y
-                )
-
-                if not isInside(Popup, point)
-                    and not isInside(Combo, point) then
+                local point = Vector2.new(input.Position.X, input.Position.Y)
+                if not isInside(Popup, point) and not isInside(Combo, point) then
                     setOpen(false)
                 end
             end
@@ -994,9 +823,5 @@ function ImGuiLib:AddTab(tabName)
 
     return tabProxy
 end
-
--- ==========================================================
--- MODULE EXPORT
--- ==========================================================
 
 return ImGuiLib
