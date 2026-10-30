@@ -1,927 +1,712 @@
+
+-- Dear ImGui-style Roblox UI Library
+-- Reusable UI components only
+
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local TextService = game:GetService("TextService")
-
-local existing = CoreGui:FindFirstChild("ImGuiCustomLib")
-if existing then
-	existing:Destroy()
-end
-
-local Style = {
-	Font = Enum.Font.Code,
-	FontSize = 14,
-	FrameHeight = 20,
-	WindowPadding = 8,
-	ItemSpacing = 4,
-	ItemInnerSpacing = 4,
-	FramePaddingX = 4,
-
-	Text = Color3.fromRGB(255, 255, 255),
-	WindowBg = {Color3.fromRGB(15, 15, 15), 0.06},
-	PopupBg = {Color3.fromRGB(20, 20, 20), 0.06},
-	Border = {Color3.fromRGB(110, 110, 128), 0.5},
-	TitleBgActive = {Color3.fromRGB(41, 74, 122), 0},
-	TitleBgCollapsed = {Color3.fromRGB(0, 0, 0), 0.49},
-	FrameBg = {Color3.fromRGB(41, 74, 122), 0.46},
-	FrameBgHovered = {Color3.fromRGB(66, 150, 250), 0.6},
-	FrameBgActive = {Color3.fromRGB(66, 150, 250), 0.33},
-	Button = {Color3.fromRGB(66, 150, 250), 0.6},
-	ButtonHovered = {Color3.fromRGB(66, 150, 250), 0},
-	Header = {Color3.fromRGB(66, 150, 250), 0.69},
-	HeaderHovered = {Color3.fromRGB(66, 150, 250), 0.2},
-	Tab = {Color3.fromRGB(42, 77, 129), 0},
-	TabHovered = {Color3.fromRGB(56, 123, 203), 0},
-	TabActive = {Color3.fromRGB(51, 105, 173), 0},
-	CheckMark = Color3.fromRGB(66, 150, 250),
-	SliderGrab = Color3.fromRGB(61, 133, 224),
-	SliderGrabActive = Color3.fromRGB(66, 150, 250),
-	ScrollbarGrab = Color3.fromRGB(79, 79, 79),
-	ResizeGrip = {Color3.fromRGB(66, 150, 250), 0.8},
-	ResizeGripHovered = {Color3.fromRGB(66, 150, 250), 0.33},
-	ResizeGripActive = {Color3.fromRGB(66, 150, 250), 0.05},
-}
-
-local function create(className, properties, parent)
-	local instance = Instance.new(className)
-
-	for key, value in pairs(properties) do
-		instance[key] = value
-	end
-
-	instance.Parent = parent
-	return instance
-end
-
-local function paint(instance, pair)
-	instance.BackgroundColor3 = pair[1]
-	instance.BackgroundTransparency = pair[2]
-end
-
-local function label(parent, properties)
-	local props = {
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Font = Style.Font,
-		TextSize = Style.FontSize,
-		TextColor3 = Style.Text,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextYAlignment = Enum.TextYAlignment.Center,
-	}
-
-	for key, value in pairs(properties) do
-		props[key] = value
-	end
-
-	return create("TextLabel", props, parent)
-end
-
-local function isInside(guiObject, point)
-	local pos = guiObject.AbsolutePosition
-	local size = guiObject.AbsoluteSize
-
-	return point.X >= pos.X
-		and point.X <= pos.X + size.X
-		and point.Y >= pos.Y
-		and point.Y <= pos.Y + size.Y
-end
-
-local function drawLine(parent, a, b, thickness, color)
-	local delta = b - a
-
-	create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromOffset(
-			(a.X + b.X) / 2,
-			(a.Y + b.Y) / 2
-		),
-		Size = UDim2.fromOffset(
-			delta.Magnitude + thickness * 0.5,
-			thickness
-		),
-		Rotation = math.deg(math.atan2(delta.Y, delta.X)),
-		BackgroundColor3 = color,
-		BorderSizePixel = 0,
-	}, parent)
-end
 
 local ImGuiLib = {}
 ImGuiLib.__index = ImGuiLib
 
-function ImGuiLib.CreateWindow(windowTitle)
-	local self = setmetatable({}, ImGuiLib)
+local Style = {
+    Font = Enum.Font.Code,
+    FontSize = 14,
+    FrameHeight = 20,
+    Padding = 8,
+    Spacing = 4,
 
-	local TITLE_H = Style.FrameHeight
-	local MIN_SIZE = Vector2.new(260, 140)
+    Text = Color3.fromRGB(255, 255, 255),
+    WindowBg = Color3.fromRGB(15, 15, 15),
+    PopupBg = Color3.fromRGB(20, 20, 20),
+    Border = Color3.fromRGB(110, 110, 128),
 
-	self.Size = Vector2.new(380, 330)
-	self.Tabs = {}
-	self.ClosePopups = {}
-	self.ActiveTabContent = nil
-	self._connections = {}
+    Title = Color3.fromRGB(41, 74, 122),
+    TitleCollapsed = Color3.fromRGB(0, 0, 0),
 
-	self.ScreenGui = create("ScreenGui", {
-		Name = "ImGuiCustomLib",
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		IgnoreGuiInset = true,
-		ResetOnSpawn = false,
-		DisplayOrder = 100,
-	}, CoreGui)
+    Frame = Color3.fromRGB(41, 74, 122),
+    FrameHover = Color3.fromRGB(66, 150, 250),
+    FrameActive = Color3.fromRGB(66, 150, 250),
 
-	-- Dedicated popup layer prevents dropdowns being clipped
-	-- by the window's scrolling content.
-	self.PopupLayer = create("Frame", {
-		Name = "PopupLayer",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 500,
-		Active = false,
-	}, self.ScreenGui)
+    Button = Color3.fromRGB(66, 150, 250),
+    Tab = Color3.fromRGB(42, 77, 129),
+    TabHover = Color3.fromRGB(56, 123, 203),
+    TabActive = Color3.fromRGB(51, 105, 173),
 
-	self.MainFrame = create("Frame", {
-		Size = UDim2.fromOffset(self.Size.X, self.Size.Y),
-		Position = UDim2.new(
-			0.5, -self.Size.X / 2,
-			0.5, -self.Size.Y / 2
-		),
-		BorderSizePixel = 0,
-		ClipsDescendants = false,
-	}, self.ScreenGui)
+    CheckMark = Color3.fromRGB(66, 150, 250),
+    Slider = Color3.fromRGB(61, 133, 224),
+}
 
-	paint(self.MainFrame, Style.WindowBg)
+local function create(className, properties, parent)
+    local obj = Instance.new(className)
 
-	create("UIStroke", {
-		Color = Style.Border[1],
-		Transparency = Style.Border[2],
-		Thickness = 1,
-	}, self.MainFrame)
+    for key, value in pairs(properties or {}) do
+        obj[key] = value
+    end
 
-	self.TopBar = create("Frame", {
-		Size = UDim2.new(1, 0, 0, TITLE_H),
-		BorderSizePixel = 0,
-		Active = true,
-		ZIndex = 2,
-	}, self.MainFrame)
+    obj.Parent = parent
+    return obj
+end
 
-	paint(self.TopBar, Style.TitleBgActive)
+local function label(parent, properties)
+    properties = properties or {}
 
-	local CollapseButton = create("TextButton", {
-		Size = UDim2.fromOffset(TITLE_H, TITLE_H),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Text = "▼",
-		TextColor3 = Style.Text,
-		TextSize = 10,
-		Font = Style.Font,
-		ZIndex = 3,
-	}, self.TopBar)
+    properties.BackgroundTransparency = 1
+    properties.BorderSizePixel = 0
+    properties.Font = properties.Font or Style.Font
+    properties.TextSize = properties.TextSize or Style.FontSize
+    properties.TextColor3 = properties.TextColor3 or Style.Text
+    properties.TextXAlignment =
+        properties.TextXAlignment or Enum.TextXAlignment.Left
+    properties.TextYAlignment =
+        properties.TextYAlignment or Enum.TextYAlignment.Center
 
-	label(self.TopBar, {
-		Position = UDim2.fromOffset(TITLE_H, 0),
-		Size = UDim2.new(1, -TITLE_H, 1, 0),
-		Text = windowTitle or "Dear ImGui Window",
-		ZIndex = 2,
-	})
+    return create("TextLabel", properties, parent)
+end
 
-	self.Body = create("Frame", {
-		Position = UDim2.fromOffset(0, TITLE_H),
-		Size = UDim2.new(1, 0, 1, -TITLE_H),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ClipsDescendants = true,
-	}, self.MainFrame)
+local function button(parent, properties)
+    properties = properties or {}
+    properties.Font = properties.Font or Style.Font
+    properties.TextSize = properties.TextSize or Style.FontSize
+    properties.TextColor3 = properties.TextColor3 or Style.Text
 
-	self.TabBar = create("Frame", {
-		Position = UDim2.fromOffset(
-			Style.WindowPadding,
-			Style.WindowPadding
-		),
-		Size = UDim2.new(
-			1, -Style.WindowPadding * 2,
-			0, Style.FrameHeight
-		),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-	}, self.Body)
+    return create("TextButton", properties, parent)
+end
 
-	create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 2),
-	}, self.TabBar)
+local function inside(gui, point)
+    local pos = gui.AbsolutePosition
+    local size = gui.AbsoluteSize
 
-	local tabLineY = Style.WindowPadding + Style.FrameHeight
+    return point.X >= pos.X
+        and point.X <= pos.X + size.X
+        and point.Y >= pos.Y
+        and point.Y <= pos.Y + size.Y
+end
 
-	local TabLine = create("Frame", {
-		Position = UDim2.fromOffset(
-			Style.WindowPadding,
-			tabLineY
-		),
-		Size = UDim2.new(
-			1, -Style.WindowPadding * 2,
-			0, 1
-		),
-		BorderSizePixel = 0,
-	}, self.Body)
+function ImGuiLib.new(title)
+    local self = setmetatable({}, ImGuiLib)
 
-	paint(TabLine, Style.TabActive)
+    local previous = CoreGui:FindFirstChild("ImGuiCustomLib")
+    if previous then
+        previous:Destroy()
+    end
 
-	self.ContentTop = tabLineY + 1
+    self.Size = Vector2.new(380, 330)
+    self.Tabs = {}
+    self.ClosePopups = {}
+    self.Connections = {}
+    self.Destroyed = false
 
-	local ResizeGrip = create("TextButton", {
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -1, 1, -1),
-		Size = UDim2.fromOffset(16, 16),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Text = "◢",
-		TextSize = 16,
-		Font = Style.Font,
-		TextColor3 = Style.ResizeGrip[1],
-		TextTransparency = Style.ResizeGrip[2],
-		ZIndex = 50,
-	}, self.Body)
+    local function connect(signal, callback)
+        local connection = signal:Connect(callback)
+        table.insert(self.Connections, connection)
+        return connection
+    end
 
-	-- Collapse
-	local isCollapsed = false
+    self.ScreenGui = create("ScreenGui", {
+        Name = "ImGuiCustomLib",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    }, CoreGui)
 
-	CollapseButton.MouseButton1Click:Connect(function()
-		isCollapsed = not isCollapsed
-		CollapseButton.Text = isCollapsed and "▶" or "▼"
+    self.MainFrame = create("Frame", {
+        Size = UDim2.fromOffset(self.Size.X, self.Size.Y),
+        Position = UDim2.new(0.5, -190, 0.5, -165),
+        BackgroundColor3 = Style.WindowBg,
+        BorderSizePixel = 0,
+        ClipsDescendants = false,
+    }, self.ScreenGui)
 
-		paint(
-			self.TopBar,
-			isCollapsed and Style.TitleBgCollapsed
-				or Style.TitleBgActive
-		)
+    create("UIStroke", {
+        Color = Style.Border,
+        Transparency = 0.5,
+        Thickness = 1,
+    }, self.MainFrame)
 
-		self.Body.Visible = not isCollapsed
-		self.MainFrame.BackgroundTransparency =
-			isCollapsed and 1 or Style.WindowBg[2]
+    self.TopBar = create("Frame", {
+        Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+        BackgroundColor3 = Style.Title,
+        BorderSizePixel = 0,
+    }, self.MainFrame)
 
-		self.MainFrame.Size = isCollapsed
-			and UDim2.fromOffset(self.Size.X, TITLE_H)
-			or UDim2.fromOffset(self.Size.X, self.Size.Y)
+    local collapse = button(self.TopBar, {
+        Size = UDim2.fromOffset(Style.FrameHeight, Style.FrameHeight),
+        BackgroundTransparency = 1,
+        Text = "▼",
+        TextSize = 10,
+        AutoButtonColor = false,
+    })
 
-		for _, closePopup in ipairs(self.ClosePopups) do
-			closePopup()
-		end
-	end)
+    label(self.TopBar, {
+        Position = UDim2.fromOffset(Style.FrameHeight + 4, 0),
+        Size = UDim2.new(1, -Style.FrameHeight - 4, 1, 0),
+        Text = title or "Dear ImGui Window",
+    })
 
-	-- Dragging and resizing
-	local dragging = false
-	local dragStart
-	local startPos
+    self.Body = create("Frame", {
+        Position = UDim2.fromOffset(0, Style.FrameHeight),
+        Size = UDim2.new(1, 0, 1, -Style.FrameHeight),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, self.MainFrame)
 
-	local resizing = false
-	local resizeStart
-	local sizeStart
+    self.TabBar = create("Frame", {
+        Position = UDim2.fromOffset(Style.Padding, Style.Padding),
+        Size = UDim2.new(1, -Style.Padding * 2, 0, Style.FrameHeight),
+        BackgroundTransparency = 1,
+    }, self.Body)
 
-	self.TopBar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging = true
-			dragStart = UserInputService:GetMouseLocation()
-			startPos = self.MainFrame.Position
-		end
-	end)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 2),
+    }, self.TabBar)
 
-	ResizeGrip.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			resizing = true
-			resizeStart = UserInputService:GetMouseLocation()
-			sizeStart = self.Size
-		end
-	end)
+    self.ContentTop = Style.Padding + Style.FrameHeight + 1
 
-	table.insert(self._connections,
-		UserInputService.InputChanged:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.MouseMovement then
-				return
-			end
+    create("Frame", {
+        Position = UDim2.fromOffset(Style.Padding, self.ContentTop - 1),
+        Size = UDim2.new(1, -Style.Padding * 2, 0, 1),
+        BackgroundColor3 = Style.TabActive,
+        BorderSizePixel = 0,
+    }, self.Body)
 
-			local mouse = UserInputService:GetMouseLocation()
+    local resize = button(self.Body, {
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -2, 1, -2),
+        Size = UDim2.fromOffset(16, 16),
+        BackgroundTransparency = 1,
+        Text = "◢",
+        TextSize = 15,
+        AutoButtonColor = false,
+        ZIndex = 50,
+    })
 
-			if dragging and dragStart and startPos then
-				local delta = mouse - dragStart
+    local collapsed = false
+    connect(collapse.MouseButton1Click, function()
+        collapsed = not collapsed
+        collapse.Text = collapsed and "▶" or "▼"
+        self.Body.Visible = not collapsed
+        self.MainFrame.Size = collapsed
+            and UDim2.fromOffset(self.Size.X, Style.FrameHeight)
+            or UDim2.fromOffset(self.Size.X, self.Size.Y)
+    end)
 
-				self.MainFrame.Position = UDim2.new(
-					startPos.X.Scale,
-					startPos.X.Offset + delta.X,
-					startPos.Y.Scale,
-					startPos.Y.Offset + delta.Y
-				)
-			elseif resizing and resizeStart and sizeStart then
-				local delta = mouse - resizeStart
+    local dragging, resizing = false, false
+    local dragStart, startPos, resizeStart, sizeStart
 
-				self.Size = Vector2.new(
-					math.max(MIN_SIZE.X, sizeStart.X + delta.X),
-					math.max(MIN_SIZE.Y, sizeStart.Y + delta.Y)
-				)
+    connect(self.TopBar.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = self.MainFrame.Position
+        end
+    end)
 
-				self.MainFrame.Size = UDim2.fromOffset(
-					self.Size.X,
-					self.Size.Y
-				)
+    connect(resize.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            resizing = true
+            resizeStart = input.Position
+            sizeStart = self.Size
+        end
+    end)
 
-				for _, closePopup in ipairs(self.ClosePopups) do
-					closePopup()
-				end
-			end
-		end)
-	)
+    connect(UserInputService.InputChanged, function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+            return
+        end
 
-	table.insert(self._connections,
-		UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				dragging = false
-				dragStart = nil
-				startPos = nil
+        if dragging and dragStart and startPos then
+            local delta = input.Position - dragStart
+            self.MainFrame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        elseif resizing and resizeStart and sizeStart then
+            local delta = input.Position - resizeStart
 
-				resizing = false
-				resizeStart = nil
-				sizeStart = nil
-				ResizeGrip.TextTransparency = Style.ResizeGrip[2]
-			end
-		end)
-	)
+            self.Size = Vector2.new(
+                math.max(260, sizeStart.X + delta.X),
+                math.max(140, sizeStart.Y + delta.Y)
+            )
 
-	table.insert(self._connections,
-		RunService.Heartbeat:Connect(function()
-			if not UserInputService:IsMouseButtonPressed(
-				Enum.UserInputType.MouseButton1
-				) then
-				dragging = false
-				dragStart = nil
-				startPos = nil
+            self.MainFrame.Size = UDim2.fromOffset(
+                self.Size.X, self.Size.Y
+            )
 
-				resizing = false
-				resizeStart = nil
-				sizeStart = nil
-				ResizeGrip.TextTransparency = Style.ResizeGrip[2]
-			end
-		end)
-	)
+            for _, close in ipairs(self.ClosePopups) do
+                close()
+            end
+        end
+    end)
 
-	return self
+    connect(UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            resizing = false
+        end
+    end)
+
+    self._connect = connect
+    return self
 end
 
 function ImGuiLib:AddTab(tabName)
-	local window = self
-
-	local tab = {
-		Active = false,
-		Hovered = false,
-	}
-
-	local textWidth = TextService:GetTextSize(
-		tabName,
-		Style.FontSize,
-		Style.Font,
-		Vector2.new(1000, 100)
-	).X
-
-	tab.Button = create("TextButton", {
-		Size = UDim2.fromOffset(textWidth + 12, Style.FrameHeight),
-		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Text = "",
-		LayoutOrder = #self.Tabs + 1,
-	}, self.TabBar)
-
-	create("UICorner", {
-		CornerRadius = UDim.new(0, 4),
-	}, tab.Button)
-
-	tab.Filler = create("Frame", {
-		Position = UDim2.new(0, 0, 1, -4),
-		Size = UDim2.new(1, 0, 0, 4),
-		BorderSizePixel = 0,
-		ZIndex = 1,
-	}, tab.Button)
-
-	label(tab.Button, {
-		Size = UDim2.fromScale(1, 1),
-		Text = tabName,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 2,
-	})
-
-	local function refreshColor()
-		local pair = tab.Active and Style.TabActive
-			or (tab.Hovered and Style.TabHovered or Style.Tab)
-
-		paint(tab.Button, pair)
-		paint(tab.Filler, pair)
-	end
-
-	local TabContent = create("ScrollingFrame", {
-		Position = UDim2.fromOffset(0, window.ContentTop),
-		Size = UDim2.new(1, 0, 1, -window.ContentTop),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 10,
-		ScrollBarImageColor3 = Style.ScrollbarGrab,
-		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
-		Visible = false,
-	}, window.Body)
-
-	create("UIPadding", {
-		PaddingLeft = UDim.new(0, Style.WindowPadding),
-		PaddingRight = UDim.new(0, Style.WindowPadding),
-		PaddingTop = UDim.new(0, Style.ItemSpacing),
-		PaddingBottom = UDim.new(0, Style.WindowPadding),
-	}, TabContent)
-
-	create("UIListLayout", {
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, Style.ItemSpacing),
-	}, TabContent)
-
-	tab.Content = TabContent
-	tab.Refresh = refreshColor
-
-	local function selectTab()
-		for _, other in ipairs(window.Tabs) do
-			other.Active = false
-			other.Content.Visible = false
-			other.Refresh()
-		end
-
-		tab.Active = true
-		TabContent.Visible = true
-		window.ActiveTabContent = TabContent
-		refreshColor()
-
-		for _, closePopup in ipairs(window.ClosePopups) do
-			closePopup()
-		end
-	end
-
-	tab.Button.MouseEnter:Connect(function()
-		tab.Hovered = true
-		refreshColor()
-	end)
-
-	tab.Button.MouseLeave:Connect(function()
-		tab.Hovered = false
-		refreshColor()
-	end)
-
-	tab.Button.MouseButton1Click:Connect(selectTab)
-
-	table.insert(window.Tabs, tab)
-	refreshColor()
-
-	if not window.ActiveTabContent then
-		selectTab()
-	end
-
-	local tabProxy = {}
-
-	function tabProxy:AddCheckbox(name, defaultState, callback)
-		local toggled = defaultState or false
-		local size = Style.FrameHeight
-
-		local Row = create("TextButton", {
-			Size = UDim2.new(1, 0, 0, size),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Text = "",
-		}, TabContent)
-
-		local Box = create("Frame", {
-			Size = UDim2.fromOffset(size, size),
-			BorderSizePixel = 0,
-		}, Row)
-
-		paint(Box, Style.FrameBg)
-
-		local Check = create("Frame", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			Visible = toggled,
-		}, Box)
-
-		drawLine(
-			Check,
-			Vector2.new(3, 10),
-			Vector2.new(7.7, 14.7),
-			2,
-			Style.CheckMark
-		)
-
-		drawLine(
-			Check,
-			Vector2.new(7.7, 14.7),
-			Vector2.new(17.1, 5.3),
-			2,
-			Style.CheckMark
-		)
-
-		label(Row, {
-			Position = UDim2.fromOffset(size + Style.ItemInnerSpacing, 0),
-			Size = UDim2.new(1, -(size + Style.ItemInnerSpacing), 1, 0),
-			Text = name,
-		})
-
-		Row.MouseButton1Click:Connect(function()
-			toggled = not toggled
-			Check.Visible = toggled
-
-			if callback then
-				local ok, err = pcall(callback, toggled)
-				if not ok then
-					warn("Checkbox callback error:", err)
-				end
-			end
-		end)
-
-		return Row
-	end
-
-	function tabProxy:AddSlider(name, min, max, defaultVal, callback)
-		local value = math.clamp(defaultVal or min, min, max)
-		local frameH = Style.FrameHeight
-		local range = math.max(max - min, 1)
-
-		local Row = create("Frame", {
-			Size = UDim2.new(1, 0, 0, frameH),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-		}, TabContent)
-
-		local Track = create("TextButton", {
-			Size = UDim2.new(0.65, 0, 1, 0),
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Text = "",
-		}, Row)
-
-		paint(Track, Style.FrameBg)
-
-		local Grab = create("Frame", {
-			BackgroundColor3 = Style.SliderGrab,
-			BorderSizePixel = 0,
-			ZIndex = 2,
-		}, Track)
-
-		local ValueText = label(Track, {
-			Size = UDim2.fromScale(1, 1),
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Text = tostring(value),
-			ZIndex = 3,
-		})
-
-		label(Row, {
-			Position = UDim2.new(0.65, Style.ItemInnerSpacing, 0, 0),
-			Size = UDim2.new(0.35, -Style.ItemInnerSpacing, 1, 0),
-			Text = name,
-		})
-
-		local function refresh()
-			local usable = math.max(Track.AbsoluteSize.X - 4, 1)
-			local grabWidth = math.min(12, usable)
-			local alpha = (value - min) / range
-
-			Grab.Size = UDim2.fromOffset(grabWidth, frameH - 4)
-			Grab.Position = UDim2.fromOffset(
-				2 + math.max(0, usable - grabWidth) * alpha,
-				2
-			)
-
-			ValueText.Text = tostring(value)
-		end
-
-		Track:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
-		refresh()
-
-		local dragging = false
-
-		local function setFromMouse(mouseX)
-			local usable = math.max(Track.AbsoluteSize.X - 4, 1)
-			local grabWidth = math.min(12, usable)
-			local travel = math.max(usable - grabWidth, 1)
-
-			local alpha = math.clamp(
-				(mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2) / travel,
-				0,
-				1
-			)
-
-			local newValue = math.floor(min + alpha * range + 0.5)
-
-			if newValue ~= value then
-				value = newValue
-				refresh()
-
-				if callback then
-					pcall(callback, value)
-				end
-			end
-		end
-
-		Track.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				dragging = true
-				setFromMouse(input.Position.X)
-			end
-		end)
-
-		local moveConnection = UserInputService.InputChanged:Connect(function(input)
-			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-				setFromMouse(UserInputService:GetMouseLocation().X)
-			end
-		end)
-
-		local endConnection = UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				dragging = false
-			end
-		end)
-
-		table.insert(window._connections, moveConnection)
-		table.insert(window._connections, endConnection)
-
-		return Row
-	end
-
-	-- FIXED DROPDOWN
-	function tabProxy:AddDropdown(name, options, defaultOption, callback)
-		assert(type(options) == "table" and #options > 0, "Dropdown requires options")
-
-		local selected = defaultOption
-		local validDefault = false
-
-		for _, option in ipairs(options) do
-			if option == selected then
-				validDefault = true
-				break
-			end
-		end
-
-		if not validDefault then
-			selected = options[1]
-		end
-
-		local frameH = Style.FrameHeight
-		local itemH = 24
-		local popupPad = 3
-
-		local Row = create("Frame", {
-			Size = UDim2.new(1, 0, 0, frameH),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			ClipsDescendants = false,
-		}, TabContent)
-
-		local Combo = create("TextButton", {
-			Size = UDim2.new(0.65, 0, 1, 0),
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Text = "",
-			ZIndex = 5,
-		}, Row)
-
-		paint(Combo, Style.FrameBg)
-
-		local SelectedText = label(Combo, {
-			Position = UDim2.fromOffset(Style.FramePaddingX, 0),
-			Size = UDim2.new(1, -(frameH + Style.FramePaddingX), 1, 0),
-			Text = tostring(selected),
-			ZIndex = 6,
-		})
-
-		local ArrowButton = create("TextLabel", {
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 0, 0, 0),
-			Size = UDim2.fromOffset(frameH, frameH),
-			BorderSizePixel = 0,
-			Font = Style.Font,
-			TextSize = 9,
-			TextColor3 = Style.Text,
-			Text = "▼",
-			ZIndex = 6,
-		}, Combo)
-
-		paint(ArrowButton, Style.Button)
-
-		label(Row, {
-			Position = UDim2.new(0.65, Style.ItemInnerSpacing, 0, 0),
-			Size = UDim2.new(0.35, -Style.ItemInnerSpacing, 1, 0),
-			Text = name,
-		})
-
-		local Popup = create("Frame", {
-			Size = UDim2.fromOffset(
-				100,
-				#options * itemH + popupPad * 2
-			),
-			BorderSizePixel = 0,
-			Visible = false,
-			Active = true,
-			ZIndex = 500,
-		}, window.PopupLayer)
-
-		paint(Popup, Style.PopupBg)
-
-		create("UIStroke", {
-			Color = Style.Border[1],
-			Transparency = Style.Border[2],
-			Thickness = 1,
-		}, Popup)
-
-		local items = {}
-		local open = false
-
-		local function refreshItems()
-			for _, item in ipairs(items) do
-				if item.Option == selected then
-					paint(item.Button, Style.Header)
-				elseif item.Hovered then
-					paint(item.Button, Style.HeaderHovered)
-				else
-					item.Button.BackgroundTransparency = 1
-				end
-			end
-		end
-
-		local function updatePosition()
-			local pos = Combo.AbsolutePosition
-			local size = Combo.AbsoluteSize
-			local popupHeight = #options * itemH + popupPad * 2
-			local screenSize = window.ScreenGui.AbsoluteSize
-
-			local x = math.clamp(
-				pos.X,
-				0,
-				math.max(0, screenSize.X - size.X)
-			)
-
-			local y = pos.Y + size.Y
-
-			if y + popupHeight > screenSize.Y then
-				y = math.max(0, pos.Y - popupHeight)
-			end
-
-			Popup.Position = UDim2.fromOffset(x, y)
-			Popup.Size = UDim2.fromOffset(size.X, popupHeight)
-		end
-
-		local function setOpen(state)
-			open = state
-
-			if state then
-				for _, closePopup in ipairs(window.ClosePopups) do
-					closePopup()
-				end
-
-				-- Register this dropdown again after closing any others.
-				updatePosition()
-				Popup.Visible = true
-				refreshItems()
-			else
-				Popup.Visible = false
-			end
-
-			paint(
-				Combo,
-				open and Style.FrameBgHovered or Style.FrameBg
-			)
-		end
-
-		for index, option in ipairs(options) do
-			local item = {
-				Option = option,
-				Hovered = false,
-			}
-
-			item.Button = create("TextButton", {
-				Position = UDim2.fromOffset(
-					0,
-					popupPad + (index - 1) * itemH
-				),
-				Size = UDim2.new(1, 0, 0, itemH),
-				BackgroundTransparency = 1,
-				BorderSizePixel = 0,
-				AutoButtonColor = false,
-				Text = tostring(option),
-				TextColor3 = Style.Text,
-				TextSize = Style.FontSize,
-				Font = Style.Font,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				ZIndex = 501,
-				Active = true,
-			}, Popup)
-
-			item.Button.MouseEnter:Connect(function()
-				item.Hovered = true
-				refreshItems()
-			end)
-
-			item.Button.MouseLeave:Connect(function()
-				item.Hovered = false
-				refreshItems()
-			end)
-
-			item.Button.MouseButton1Click:Connect(function()
-				selected = option
-
-				-- Immediately update the visible selection.
-				SelectedText.Text = tostring(selected)
-				refreshItems()
-				setOpen(false)
-
-				print(name .. " selected:", selected)
-
-				if callback then
-					local ok, err = pcall(callback, selected)
-					if not ok then
-						warn("Dropdown callback error:", err)
-					end
-				end
-			end)
-
-			table.insert(items, item)
-		end
-
-		Combo.MouseButton1Click:Connect(function()
-			setOpen(not open)
-		end)
-
-		-- Clicking outside the popup closes it without consuming
-		-- the click intended for another control.
-		local outsideConnection = UserInputService.InputBegan:Connect(function(input)
-			if not open or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-				return
-			end
-
-			task.defer(function()
-				if not open then
-					return
-				end
-
-				local point = UserInputService:GetMouseLocation()
-
-				if not isInside(Popup, point) and not isInside(Combo, point) then
-					setOpen(false)
-				end
-			end)
-		end)
-
-		table.insert(window._connections, outsideConnection)
-
-		local scrollConnection = TabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-			if open then
-				updatePosition()
-			end
-		end)
-
-		table.insert(window._connections, scrollConnection)
-
-		local positionConnection = Combo:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-			if open then
-				updatePosition()
-			end
-		end)
-
-		table.insert(window._connections, positionConnection)
-
-		table.insert(window.ClosePopups, function()
-			if open then
-				setOpen(false)
-			end
-		end)
-
-		local api = {}
-
-		function api:GetValue()
-			return selected
-		end
-
-		function api:SetValue(value)
-			for _, option in ipairs(options) do
-				if option == value then
-					selected = value
-					SelectedText.Text = tostring(selected)
-					refreshItems()
-					return true
-				end
-			end
-
-			return false
-		end
-
-		return api
-	end
-
-	return tabProxy
+    local window = self
+
+    local tab = {
+        Active = false,
+        Hovered = false,
+    }
+
+    local textSize = TextService:GetTextSize(
+        tabName,
+        Style.FontSize,
+        Style.Font,
+        Vector2.new(1000, 100)
+    )
+
+    tab.Button = button(self.TabBar, {
+        Size = UDim2.fromOffset(textSize.X + 16, Style.FrameHeight),
+        BackgroundColor3 = Style.Tab,
+        BorderSizePixel = 0,
+        Text = tabName,
+        LayoutOrder = #self.Tabs + 1,
+        AutoButtonColor = false,
+    })
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 3),
+    }, tab.Button)
+
+    tab.Content = create("ScrollingFrame", {
+        Position = UDim2.fromOffset(0, self.ContentTop),
+        Size = UDim2.new(1, 0, 1, -self.ContentTop),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 8,
+        ScrollBarImageColor3 = Color3.fromRGB(79, 79, 79),
+        Visible = false,
+    }, self.Body)
+
+    create("UIPadding", {
+        PaddingLeft = UDim.new(0, Style.Padding),
+        PaddingRight = UDim.new(0, Style.Padding),
+        PaddingTop = UDim.new(0, Style.Spacing),
+        PaddingBottom = UDim.new(0, Style.Padding),
+    }, tab.Content)
+
+    create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, Style.Spacing),
+    }, tab.Content)
+
+    local function refresh()
+        tab.Button.BackgroundColor3 = tab.Active
+            and Style.TabActive
+            or (tab.Hovered and Style.TabHover or Style.Tab)
+    end
+
+    local function selectTab()
+        for _, other in ipairs(window.Tabs) do
+            other.Active = false
+            other.Content.Visible = false
+            other.Button.BackgroundColor3 = Style.Tab
+        end
+
+        tab.Active = true
+        tab.Content.Visible = true
+        window.ActiveTabContent = tab.Content
+        refresh()
+
+        for _, close in ipairs(window.ClosePopups) do
+            close()
+        end
+    end
+
+    window._connect(tab.Button.MouseEnter, function()
+        tab.Hovered = true
+        refresh()
+    end)
+
+    window._connect(tab.Button.MouseLeave, function()
+        tab.Hovered = false
+        refresh()
+    end)
+
+    window._connect(tab.Button.MouseButton1Click, selectTab)
+
+    table.insert(window.Tabs, tab)
+
+    local api = {}
+
+    function api:AddCheckbox(name, defaultState, callback)
+        local value = defaultState == true
+
+        local row = button(tab.Content, {
+            Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+            BackgroundTransparency = 1,
+            Text = "",
+            AutoButtonColor = false,
+            TextXAlignment = Enum.TextXAlignment.Left,
+        })
+
+        local box = create("Frame", {
+            Size = UDim2.fromOffset(Style.FrameHeight, Style.FrameHeight),
+            BackgroundColor3 = Style.Frame,
+            BorderSizePixel = 0,
+        }, row)
+
+        local check = label(box, {
+            Size = UDim2.fromScale(1, 1),
+            Text = "✓",
+            TextColor3 = Style.CheckMark,
+            TextSize = 17,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Visible = value,
+        })
+
+        label(row, {
+            Position = UDim2.fromOffset(Style.FrameHeight + 6, 0),
+            Size = UDim2.new(1, -Style.FrameHeight - 6, 1, 0),
+            Text = name,
+        })
+
+        local control = {}
+
+        function control:GetValue()
+            return value
+        end
+
+        function control:SetValue(newValue)
+            value = newValue == true
+            check.Visible = value
+            if callback then
+                task.spawn(callback, value)
+            end
+        end
+
+        window._connect(row.MouseEnter, function()
+            box.BackgroundColor3 = Style.FrameHover
+        end)
+
+        window._connect(row.MouseLeave, function()
+            box.BackgroundColor3 = Style.Frame
+        end)
+
+        window._connect(row.MouseButton1Click, function()
+            control:SetValue(not value)
+        end)
+
+        return control
+    end
+
+    function api:AddSlider(name, min, max, defaultValue, step, callback)
+        min = tonumber(min) or 0
+        max = tonumber(max) or 100
+        step = math.max(tonumber(step) or 1, 0.0001)
+
+        if max < min then
+            min, max = max, min
+        end
+
+        local value = math.clamp(
+            tonumber(defaultValue) or min, min, max
+        )
+
+        local row = create("Frame", {
+            Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+            BackgroundTransparency = 1,
+        }, tab.Content)
+
+        local track = button(row, {
+            Size = UDim2.new(0.65, 0, 1, 0),
+            BackgroundColor3 = Style.Frame,
+            Text = "",
+            AutoButtonColor = false,
+            ClipsDescendants = true,
+        })
+
+        local fill = create("Frame", {
+            Size = UDim2.new(0, 0, 1, 0),
+            BackgroundColor3 = Style.Slider,
+            BorderSizePixel = 0,
+        }, track)
+
+        local valueLabel = label(track, {
+            Size = UDim2.fromScale(1, 1),
+            Text = tostring(value),
+            TextXAlignment = Enum.TextXAlignment.Center,
+            ZIndex = 2,
+        })
+
+        label(row, {
+            Position = UDim2.new(0.65, 6, 0, 0),
+            Size = UDim2.new(0.35, -6, 1, 0),
+            Text = name,
+        })
+
+        local dragging = false
+        local control = {}
+
+        local function refresh()
+            local alpha = max == min and 0 or (value - min) / (max - min)
+            fill.Size = UDim2.new(alpha, 0, 1, 0)
+            valueLabel.Text = tostring(value)
+        end
+
+        local function setValue(newValue)
+            newValue = math.clamp(newValue, min, max)
+            newValue = min + math.floor((newValue - min) / step + 0.5) * step
+            newValue = math.clamp(newValue, min, max)
+
+            if value == newValue then
+                refresh()
+                return
+            end
+
+            value = newValue
+            refresh()
+
+            if callback then
+                task.spawn(callback, value)
+            end
+        end
+
+        local function updateFromMouse(x)
+            local width = track.AbsoluteSize.X
+            if width <= 0 then return end
+
+            local alpha = math.clamp(
+                (x - track.AbsolutePosition.X) / width, 0, 1
+            )
+
+            setValue(min + alpha * (max - min))
+        end
+
+        window._connect(track.InputBegan, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                updateFromMouse(input.Position.X)
+            end
+        end)
+
+        window._connect(UserInputService.InputChanged, function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                updateFromMouse(input.Position.X)
+            end
+        end)
+
+        window._connect(UserInputService.InputEnded, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+
+        function control:GetValue()
+            return value
+        end
+
+        function control:SetValue(newValue)
+            setValue(tonumber(newValue) or min)
+        end
+
+        refresh()
+        return control
+    end
+
+    api.AddArrowSlider = api.AddSlider
+
+    function api:AddDropdown(name, options, defaultOption, callback)
+        options = options or {}
+
+        local selected = defaultOption
+        local found = false
+
+        for _, option in ipairs(options) do
+            if option == selected then
+                found = true
+                break
+            end
+        end
+
+        if not found then
+            selected = options[1]
+        end
+
+        local row = create("Frame", {
+            Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+            BackgroundTransparency = 1,
+        }, tab.Content)
+
+        local combo = button(row, {
+            Size = UDim2.new(0.65, 0, 1, 0),
+            BackgroundColor3 = Style.Frame,
+            Text = "",
+            AutoButtonColor = false,
+        })
+
+        label(combo, {
+            Position = UDim2.fromOffset(4, 0),
+            Size = UDim2.new(1, -28, 1, 0),
+            Text = tostring(selected or ""),
+        })
+
+        local selectedLabel = combo:FindFirstChildOfClass("TextLabel")
+
+        label(row, {
+            Position = UDim2.new(0.65, 6, 0, 0),
+            Size = UDim2.new(0.35, -6, 1, 0),
+            Text = name,
+        })
+
+        local popup = create("Frame", {
+            Size = UDim2.fromOffset(100, 100),
+            BackgroundColor3 = Style.PopupBg,
+            BorderSizePixel = 0,
+            Visible = false,
+            ZIndex = 100,
+        }, window.ScreenGui)
+
+        create("UIStroke", {
+            Color = Style.Border,
+            Transparency = 0.35,
+        }, popup)
+
+        local layout = create("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, popup)
+
+        local open = false
+        local control = {}
+
+        local function setOpen(state)
+            open = state
+            popup.Visible = state
+
+            if state then
+                local pos = combo.AbsolutePosition
+                popup.Position = UDim2.fromOffset(
+                    pos.X,
+                    pos.Y + combo.AbsoluteSize.Y
+                )
+                popup.Size = UDim2.fromOffset(
+                    combo.AbsoluteSize.X,
+                    math.max(1, #options * Style.FrameHeight)
+                )
+                popup.ZIndex = 100
+            end
+        end
+
+        local function setValue(option)
+            selected = option
+            selectedLabel.Text = tostring(option)
+            setOpen(false)
+
+            if callback then
+                task.spawn(callback, option)
+            end
+        end
+
+        for _, option in ipairs(options) do
+            local item = button(popup, {
+                Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+                BackgroundTransparency = 1,
+                Text = tostring(option),
+                TextXAlignment = Enum.TextXAlignment.Left,
+                AutoButtonColor = false,
+                ZIndex = 101,
+            })
+
+            item.MouseEnter:Connect(function()
+                item.BackgroundTransparency = 0
+                item.BackgroundColor3 = Style.FrameHover
+            end)
+
+            item.MouseLeave:Connect(function()
+                item.BackgroundTransparency = 1
+            end)
+
+            item.MouseButton1Click:Connect(function()
+                setValue(option)
+            end)
+        end
+
+        window._connect(combo.MouseButton1Click, function()
+            setOpen(not open)
+        end)
+
+        window._connect(UserInputService.InputBegan, function(input)
+            if not open or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+                return
+            end
+
+            local point = Vector2.new(input.Position.X, input.Position.Y)
+
+            if not inside(popup, point) and not inside(combo, point) then
+                setOpen(false)
+            end
+        end)
+
+        window._connect(tab.Content:GetPropertyChangedSignal("CanvasPosition"), function()
+            if open then setOpen(false) end
+        end)
+
+        table.insert(window.ClosePopups, function()
+            if open then setOpen(false) end
+        end)
+
+        function control:GetValue()
+            return selected
+        end
+
+        function control:SetValue(option)
+            for _, validOption in ipairs(options) do
+                if validOption == option then
+                    setValue(option)
+                    return true
+                end
+            end
+
+            return false
+        end
+
+        return control
+    end
+
+    api.AddCheckbox = api.AddCheckbox
+    tab.API = api
+
+    if not self.ActiveTabContent then
+        tab.Button.BackgroundColor3 = Style.TabActive
+        tab.Active = true
+        tab.Content.Visible = true
+        self.ActiveTabContent = tab.Content
+    end
+
+    return api
+end
+
+function ImGuiLib:Destroy()
+    if self.Destroyed then return end
+    self.Destroyed = true
+
+    for _, connection in ipairs(self.Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    for _, close in ipairs(self.ClosePopups) do
+        pcall(close)
+    end
+
+    if self.ScreenGui then
+        self.ScreenGui:Destroy()
+    end
 end
 
 return ImGuiLib
