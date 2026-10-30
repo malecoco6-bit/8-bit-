@@ -1,0 +1,136 @@
+-- ==========================================================
+-- STANDALONE CORNER BOX ESP & SIDE HEALTH BAR MODULE
+-- ==========================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local ESP_Cache = {}
+
+local function createDrawingObjects()
+	local objects = {}
+	
+	-- Black Outlines (Created first for background stacking)
+	for _, name in ipairs({"TL1_O", "TL2_O", "TR1_O", "TR2_O", "BL1_O", "BL2_O", "BR1_O", "BR2_O"}) do
+		objects[name] = Drawing.new("Line")
+		objects[name].Visible = false
+		objects[name].Thickness = 3
+		objects[name].Color = Color3.fromRGB(0, 0, 0)
+	end
+
+	-- White Corner Lines (Created second to render cleanly on top)
+	for _, name in ipairs({"TL1", "TL2", "TR1", "TR2", "BL1", "BL2", "BR1", "BR2"}) do
+		objects[name] = Drawing.new("Line")
+		objects[name].Visible = false
+		objects[name].Thickness = 1
+		objects[name].Color = Color3.fromRGB(255, 255, 255)
+	end
+
+	-- Health Bar Elements
+	objects.HealthBarBg = Drawing.new("Line")
+	objects.HealthBarBg.Visible = false
+	objects.HealthBarBg.Thickness = 3
+	objects.HealthBarBg.Color = Color3.fromRGB(0, 0, 0)
+
+	objects.HealthBar = Drawing.new("Line")
+	objects.HealthBar.Visible = false
+	objects.HealthBar.Thickness = 1
+
+	return objects
+end
+
+-- Cleanup drawings when players leave
+Players.PlayerRemoving:Connect(function(player)
+	if ESP_Cache[player] then
+		for _, obj in pairs(ESP_Cache[player]) do
+			pcall(function() obj:Remove() end)
+		end
+		ESP_Cache[player] = nil
+	end
+end)
+
+-- Main ESP Render Loop
+RunService.RenderStepped:Connect(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			if not ESP_Cache[player] then
+				ESP_Cache[player] = createDrawingObjects()
+			end
+
+			local objects = ESP_Cache[player]
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+			local renderESP = false
+			if character and hrp and humanoid and humanoid.Health > 0 then
+				local _, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					renderESP = true
+
+					local cf, size = character:GetBoundingBox()
+					local topPos, topVis = Camera:WorldToViewportPoint((cf + Vector3.new(0, size.Y / 2, 0)).Position)
+					local botPos, botVis = Camera:WorldToViewportPoint((cf - Vector3.new(0, size.Y / 2, 0)).Position)
+
+					if topVis and botVis then
+						local height = math.abs(botPos.Y - topPos.Y)
+						local width = height / 2
+						local x = topPos.X - width / 2
+						local y = topPos.Y
+
+						-- Corner Box Calculations
+						local lineLen = math.clamp(width / 4, 4, 12)
+						local corners = {
+							{{Vector2.new(x, y), Vector2.new(x + lineLen, y)}, {Vector2.new(x, y), Vector2.new(x, y + lineLen)}},
+							{{Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)}, {Vector2.new(x + width, y), Vector2.new(x + width, y + lineLen)}},
+							{{Vector2.new(x, y + height), Vector2.new(x + lineLen, y + height)}, {Vector2.new(x, y + height), Vector2.new(x, y + height - lineLen)}},
+							{{Vector2.new(x + width, y + height), Vector2.new(x + width - lineLen, y + height)}, {Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - lineLen)}}
+						}
+
+						local cKeys = {"TL", "TR", "BL", "BR"}
+						for i, corner in ipairs(corners) do
+							local k = cKeys[i]
+
+							-- Outlines
+							objects[k.."1_O"].Visible = true
+							objects[k.."1_O"].From, objects[k.."1_O"].To = corner[1][1], corner[1][2]
+							objects[k.."2_O"].Visible = true
+							objects[k.."2_O"].From, objects[k.."2_O"].To = corner[2][1], corner[2][2]
+
+							-- White Lines
+							objects[k.."1"].Visible = true
+							objects[k.."1"].From, objects[k.."1"].To = corner[1][1], corner[1][2]
+							objects[k.."2"].Visible = true
+							objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
+						end
+
+						-- Health Bar Side ESP Logic
+						local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+						local barX = x - 6
+						local barTopY = y
+						local barBotY = y + height
+
+						objects.HealthBarBg.Visible = true
+						objects.HealthBarBg.From = Vector2.new(barX, barTopY)
+						objects.HealthBarBg.To = Vector2.new(barX, barBotY)
+
+						objects.HealthBar.Visible = true
+						objects.HealthBar.From = Vector2.new(barX, barBotY - (height * healthPct))
+						objects.HealthBar.To = Vector2.new(barX, barBotY)
+						objects.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 0, 0), 1 - healthPct)
+					else
+						renderESP = false
+					end
+				end
+			end
+
+			if not renderESP then
+				for _, obj in pairs(objects) do
+					obj.Visible = false
+				end
+			end
+		end
+	end
+end)
