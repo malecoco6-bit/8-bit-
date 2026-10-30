@@ -1,0 +1,96 @@
+-- ==========================================================
+-- STANDALONE SIDE HEALTH BAR ESP MODULE
+-- ==========================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local HealthBar_Cache = {}
+
+local function createHealthBarObjects()
+	local objects = {}
+	
+	-- Black background outline for contrast
+	objects.HealthBarBg = Drawing.new("Line")
+	objects.HealthBarBg.Visible = false
+	objects.HealthBarBg.Thickness = 3
+	objects.HealthBarBg.Color = Color3.fromRGB(0, 0, 0)
+
+	-- Dynamic colored health bar line
+	objects.HealthBar = Drawing.new("Line")
+	objects.HealthBar.Visible = false
+	objects.HealthBar.Thickness = 1
+
+	return objects
+end
+
+-- Cleanup drawings when players leave the game
+Players.PlayerRemoving:Connect(function(player)
+	if HealthBar_Cache[player] then
+		for _, obj in pairs(HealthBar_Cache[player]) do
+			pcall(function() obj:Remove() end)
+		end
+		HealthBar_Cache[player] = nil
+	end
+end)
+
+-- Main Render Loop for Health Bar ESP
+RunService.RenderStepped:Connect(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			if not HealthBar_Cache[player] then
+				HealthBar_Cache[player] = createHealthBarObjects()
+			end
+
+			local objects = HealthBar_Cache[player]
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+			local renderESP = false
+			if character and hrp and humanoid and humanoid.Health > 0 then
+				local _, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					renderESP = true
+
+					local cf, size = character:GetBoundingBox()
+					local topPos, topVis = Camera:WorldToViewportPoint((cf + Vector3.new(0, size.Y / 2, 0)).Position)
+					local botPos, botVis = Camera:WorldToViewportPoint((cf - Vector3.new(0, size.Y / 2, 0)).Position)
+
+					if topVis and botVis then
+						local height = math.abs(botPos.Y - topPos.Y)
+						local width = height / 2
+						local x = topPos.X - width / 2
+						local y = topPos.Y
+
+						-- Health Bar Side Calculations
+						local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+						local barX = x - 6
+						local barTopY = y
+						local barBotY = y + height
+
+						-- Background Line
+						objects.HealthBarBg.Visible = true
+						objects.HealthBarBg.From = Vector2.new(barX, barTopY)
+						objects.HealthBarBg.To = Vector2.new(barX, barBotY)
+
+						-- Foreground Fill Line (lerps from green to red based on health)
+						objects.HealthBar.Visible = true
+						objects.HealthBar.From = Vector2.new(barX, barBotY - (height * healthPct))
+						objects.HealthBar.To = Vector2.new(barX, barBotY)
+						objects.HealthBar.Color = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 0, 0), 1 - healthPct)
+					else
+						renderESP = false
+					end
+				end
+			end
+
+			if not renderESP then
+				objects.HealthBarBg.Visible = false
+				objects.HealthBar.Visible = false
+			end
+		end
+	end
+end)
