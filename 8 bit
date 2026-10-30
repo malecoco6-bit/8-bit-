@@ -12,7 +12,6 @@ local MESH_ROTATION = CFrame.Angles(0, math.rad(180), 0)
 local MUZZLE_FORWARD_OFFSET = 0.3
 local CUSTOM_SOUND_ID = "rbxassetid://11944350"
 
--- Target original name and its new renamed value
 local TARGET_TOOL_NAME = "M9"
 local NEW_TOOL_NAME = "8 Bit"
 
@@ -40,7 +39,7 @@ local function spawnLocalNeonTracer(origin, target)
     tracer.Color = Color3.fromRGB(255, 0, 0)
     tracer.Size = Vector3.new(0.05, 0.05, distance)
     tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
-    tracer.Parent = camera -- Parents to camera so only you can see it
+    tracer.Parent = camera
 
     task.spawn(function()
         for i = 1, 10 do
@@ -52,26 +51,19 @@ local function spawnLocalNeonTracer(origin, target)
     end)
 end
 
--- Strictly checks if the firing origin belongs to your tool specifically (checks both names just in case)
+-- FIXED: Strictly checks active tool ownership and handle connection to prevent other players from triggering it
 local function IsLocalPlayerFiring(origin)
     local character = player.Character
     if not character then return false end
 
     local tool = character:FindFirstChildOfClass("Tool")
     if tool and (tool.Name == TARGET_TOOL_NAME or tool.Name == NEW_TOOL_NAME) then
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        local head = character:FindFirstChild("Head")
-        
-        if rootPart and (rootPart.Position - origin).Magnitude < 12 then
-            return true
-        end
-        if head and (head.Position - origin).Magnitude < 12 then
-            return true
-        end
-
         local handle = tool:FindFirstChild("Handle")
-        if handle and (handle.Position - origin).Magnitude < 8 then
-            return true
+        if handle then
+            -- Checks if the origin is tightly bound to your specific tool handle's position
+            if (handle.Position - origin).Magnitude < 6 then
+                return true
+            end
         end
     end
 
@@ -234,7 +226,6 @@ end
 local function processTool(tool)
     if not tool or not tool:IsA("Tool") then return end
     
-    -- Check if it matches either the original name or is already renamed
     if tool.Name ~= TARGET_TOOL_NAME and tool.Name ~= NEW_TOOL_NAME then return end
 
     if processedTools[tool] then
@@ -249,7 +240,6 @@ local function processTool(tool)
     processedTools[tool] = true
     enableRapidFire(tool)
 
-    -- Rename the tool to 8 Bit after applying everything
     tool.Name = NEW_TOOL_NAME
 end
 
