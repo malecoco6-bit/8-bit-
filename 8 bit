@@ -1,4 +1,4 @@
-
+-- 8 Bit Gun M9
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -136,7 +136,7 @@ local function applySoundToTool(tool)
     end
 end
 
-local function changeM9Mesh(tool)
+local function setupM9MeshAndWelds(tool)
     local character = player.Character
     local backpack = player:WaitForChild("Backpack")
 
@@ -165,59 +165,33 @@ local function changeM9Mesh(tool)
         mesh.TextureID = TEXTURE_ID
         mesh.Size = TARGET_SIZE
 
-        local relativeCFrame = handle.CFrame:ToObjectSpace(mesh.CFrame)
-
+        -- Clean up old custom welds to prevent overlapping/jittering
         for _, obj in ipairs(tool:GetDescendants()) do
-            if obj:IsA("WeldConstraint")
-                and (
-                    (obj.Part0 == handle and obj.Part1 == mesh)
-                    or (obj.Part1 == handle and obj.Part0 == mesh)
-                ) then
+            if obj.Name == "M9MeshOrientationWeld" or obj.Name == "MuzzlePositionWeld" then
                 obj:Destroy()
             end
         end
 
-        mesh.CFrame = handle.CFrame * relativeCFrame * MESH_ROTATION
-
-        local weld = Instance.new("Weld")
-        weld.Name = "M9MeshOrientationWeld"
-        weld.Part0 = handle
-        weld.Part1 = mesh
-        weld.C0 = handle.CFrame:ToObjectSpace(mesh.CFrame)
-        weld.C1 = CFrame.identity
-        weld.Parent = handle
+        -- Use a WeldConstraint for solid physics-bound alignment
+        local meshWeld = Instance.new("WeldConstraint")
+        meshWeld.Name = "M9MeshOrientationWeld"
+        meshWeld.Part0 = handle
+        meshWeld.Part1 = mesh
+        meshWeld.Parent = handle
+        mesh.CFrame = handle.CFrame * MESH_ROTATION
 
         if muzzle and muzzle:IsA("BasePart") then
-            local oldRelativeCFrame =
-                handle.CFrame:ToObjectSpace(muzzle.CFrame)
-
-            local oldWelds = {}
-
             for _, obj in ipairs(handle:GetChildren()) do
-                if obj:IsA("WeldConstraint")
-                    and (
-                        (obj.Part0 == handle and obj.Part1 == muzzle)
-                        or (obj.Part1 == handle and obj.Part0 == muzzle)
-                    ) then
-                    table.insert(oldWelds, obj)
+                if obj:IsA("WeldConstraint") and (obj.Part0 == muzzle or obj.Part1 == muzzle) then
+                    obj:Destroy()
                 end
             end
 
-            for _, oldWeld in ipairs(oldWelds) do
-                oldWeld:Destroy()
-            end
-
-            local newRelativeCFrame =
-                oldRelativeCFrame
-                * CFrame.new(0, 0, -MUZZLE_FORWARD_OFFSET)
-
-            muzzle.CFrame = handle.CFrame * newRelativeCFrame
-
-            local newWeld = Instance.new("WeldConstraint")
-            newWeld.Name = "MuzzlePositionWeld"
-            newWeld.Part0 = handle
-            newWeld.Part1 = muzzle
-            newWeld.Parent = handle
+            local muzzleWeld = Instance.new("WeldConstraint")
+            muzzleWeld.Name = "MuzzlePositionWeld"
+            muzzleWeld.Part0 = handle
+            muzzleWeld.Part1 = muzzle
+            muzzleWeld.Parent = handle
         end
     end)
 end
@@ -249,7 +223,7 @@ local function applyM9Once(tool)
         return
     end
 
-    changeM9Mesh(tool)
+    setupM9MeshAndWelds(tool)
 
     processedM9[tool] = true
     enableRapidFire(tool)
@@ -305,11 +279,7 @@ RunService.RenderStepped:Connect(function()
         local mesh = tool:FindFirstChild("Meshes/M9_3", true)
         
         if handle and mesh then
-            local weld = handle:FindFirstChild("M9MeshOrientationWeld")
-            if not weld or weld.Part1 ~= mesh then
-                -- Re-apply mesh adjustments if welds broke or got wiped out
-                changeM9Mesh(tool)
-            end
+            mesh.CFrame = handle.CFrame * MESH_ROTATION
         end
     end
 end)
