@@ -1,7 +1,7 @@
--- 8 bit
+-- 8 Bit
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
 local MESH_ID = "rbxassetid://542124581"
@@ -12,15 +12,14 @@ local MESH_ROTATION = CFrame.Angles(0, math.rad(180), 0)
 local MUZZLE_FORWARD_OFFSET = 0.3
 local CUSTOM_SOUND_ID = "rbxassetid://11944350"
 
-local TOOL_NAMES = {
-    ["M9"] = true,
-    ["8 Bit"] = true
-}
+-- Target original name and its new renamed value
+local TARGET_TOOL_NAME = "M9"
+local NEW_TOOL_NAME = "8 Bit"
 
 local originalFireRates = setmetatable({}, {__mode = "k"})
 local originalAutoFires = setmetatable({}, {__mode = "k"})
 local originalSoundIds = setmetatable({}, {__mode = "k"})
-local processedM9 = setmetatable({}, {__mode = "k"})
+local processedTools = setmetatable({}, {__mode = "k"})
 
 -- Spawns the tracer strictly inside the local client's camera viewport (Client-Side Only)
 local function spawnLocalNeonTracer(origin, target)
@@ -41,7 +40,7 @@ local function spawnLocalNeonTracer(origin, target)
     tracer.Color = Color3.fromRGB(255, 0, 0)
     tracer.Size = Vector3.new(0.05, 0.05, distance)
     tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
-    tracer.Parent = camera
+    tracer.Parent = camera -- Parents to camera so only you can see it
 
     task.spawn(function()
         for i = 1, 10 do
@@ -53,19 +52,26 @@ local function spawnLocalNeonTracer(origin, target)
     end)
 end
 
--- Strictly validates that the firing origin belongs to YOUR equipped tool handle
+-- Strictly checks if the firing origin belongs to your tool specifically (checks both names just in case)
 local function IsLocalPlayerFiring(origin)
     local character = player.Character
     if not character then return false end
 
     local tool = character:FindFirstChildOfClass("Tool")
-    if tool and TOOL_NAMES[tool.Name] then
+    if tool and (tool.Name == TARGET_TOOL_NAME or tool.Name == NEW_TOOL_NAME) then
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local head = character:FindFirstChild("Head")
+        
+        if rootPart and (rootPart.Position - origin).Magnitude < 12 then
+            return true
+        end
+        if head and (head.Position - origin).Magnitude < 12 then
+            return true
+        end
+
         local handle = tool:FindFirstChild("Handle")
-        if handle then
-            -- Checks if the firing origin matches your handle's current position precisely
-            if (handle.Position - origin).Magnitude < 4 then
-                return true
-            end
+        if handle and (handle.Position - origin).Magnitude < 8 then
+            return true
         end
     end
 
@@ -130,20 +136,16 @@ local function applySoundToTool(tool)
     end
 end
 
-local function setupM9MeshAndWelds(tool)
+local function changeToolMesh(tool)
     local character = player.Character
     local backpack = player:WaitForChild("Backpack")
 
     tool = tool
-        or (character and (character:FindFirstChild("M9") or character:FindFirstChild("8 Bit")))
-        or backpack:FindFirstChild("M9")
-        or backpack:FindFirstChild("8 Bit")
+        or (character and (character:FindFirstChild(TARGET_TOOL_NAME) or character:FindFirstChild(NEW_TOOL_NAME)))
+        or backpack:FindFirstChild(TARGET_TOOL_NAME)
+        or backpack:FindFirstChild(NEW_TOOL_NAME)
 
     if not tool then return end
-
-    if tool.Name == "M9" then
-        tool.Name = "8 Bit"
-    end
 
     local mesh = tool:FindFirstChild("Meshes/M9_3", true)
     local handle = tool:FindFirstChild("Handle")
@@ -159,39 +161,64 @@ local function setupM9MeshAndWelds(tool)
         mesh.TextureID = TEXTURE_ID
         mesh.Size = TARGET_SIZE
 
+        local relativeCFrame = handle.CFrame:ToObjectSpace(mesh.CFrame)
+
         for _, obj in ipairs(tool:GetDescendants()) do
-            if obj.Name == "M9MeshOrientationWeld" or obj.Name == "MuzzlePositionWeld" then
+            if obj:IsA("WeldConstraint")
+                and (
+                    (obj.Part0 == handle and obj.Part1 == mesh)
+                    or (obj.Part1 == handle and obj.Part0 == mesh)
+                ) then
                 obj:Destroy()
             end
         end
 
-        local meshWeld = Instance.new("WeldConstraint")
-        meshWeld.Name = "M9MeshOrientationWeld"
-        meshWeld.Part0 = handle
-        meshWeld.Part1 = mesh
-        meshWeld.Parent = handle
+        mesh.CFrame = handle.CFrame * relativeCFrame * MESH_ROTATION
 
-        mesh.CFrame = handle.CFrame * MESH_ROTATION
+        local weld = Instance.new("Weld")
+        weld.Name = "ToolMeshOrientationWeld"
+        weld.Part0 = handle
+        weld.Part1 = mesh
+        weld.C0 = handle.CFrame:ToObjectSpace(mesh.CFrame)
+        weld.C1 = CFrame.identity
+        weld.Parent = handle
 
         if muzzle and muzzle:IsA("BasePart") then
+            local oldRelativeCFrame =
+                handle.CFrame:ToObjectSpace(muzzle.CFrame)
+
+            local oldWelds = {}
+
             for _, obj in ipairs(handle:GetChildren()) do
-                if obj:IsA("WeldConstraint") and (obj.Part0 == muzzle or obj.Part1 == muzzle) then
-                    obj:Destroy()
+                if obj:IsA("WeldConstraint")
+                    and (
+                        (obj.Part0 == handle and obj.Part1 == muzzle)
+                        or (obj.Part1 == handle and obj.Part0 == muzzle)
+                    ) then
+                    table.insert(oldWelds, obj)
                 end
             end
 
-            local muzzleWeld = Instance.new("WeldConstraint")
-            muzzleWeld.Name = "MuzzlePositionWeld"
-            muzzleWeld.Part0 = handle
-            muzzleWeld.Part1 = muzzle
-            muzzleWeld.Parent = handle
+            for _, oldWeld in ipairs(oldWelds) do
+                oldWeld:Destroy()
+            end
+
+            local newRelativeCFrame =
+                oldRelativeCFrame
+                * CFrame.new(0, 0, -MUZZLE_FORWARD_OFFSET)
+
+            muzzle.CFrame = handle.CFrame * newRelativeCFrame
+
+            local newWeld = Instance.new("WeldConstraint")
+            newWeld.Name = "MuzzlePositionWeld"
+            newWeld.Part0 = handle
+            newWeld.Part1 = muzzle
+            newWeld.Parent = handle
         end
     end)
 end
 
 local function enableRapidFire(tool)
-    if not tool then return end
-
     if originalFireRates[tool] == nil then
         originalFireRates[tool] = tool:GetAttribute("FireRate") or 0.5
     end
@@ -204,39 +231,43 @@ local function enableRapidFire(tool)
     tool:SetAttribute("AutoFire", true)
 end
 
-local function applyM9Once(tool)
+local function processTool(tool)
     if not tool or not tool:IsA("Tool") then return end
-    if not TOOL_NAMES[tool.Name] then return end
     
-    if processedM9[tool] then
-        if tool.Name == "M9" then
-            tool.Name = "8 Bit"
-        end
+    -- Check if it matches either the original name or is already renamed
+    if tool.Name ~= TARGET_TOOL_NAME and tool.Name ~= NEW_TOOL_NAME then return end
+
+    if processedTools[tool] then
         enableRapidFire(tool)
+        if tool.Name == TARGET_TOOL_NAME then
+            tool.Name = NEW_TOOL_NAME
+        end
         return
     end
 
-    setupM9MeshAndWelds(tool)
-
-    processedM9[tool] = true
+    changeToolMesh(tool)
+    processedTools[tool] = true
     enableRapidFire(tool)
+
+    -- Rename the tool to 8 Bit after applying everything
+    tool.Name = NEW_TOOL_NAME
 end
 
 local function watchContainer(container)
     container.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") and TOOL_NAMES[child.Name] then
+        if child:IsA("Tool") and (child.Name == TARGET_TOOL_NAME or child.Name == NEW_TOOL_NAME) then
             task.delay(0.5, function()
                 if child.Parent then
-                    applyM9Once(child)
+                    processTool(child)
                 end
             end)
         end
     end)
 
     for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("Tool") and TOOL_NAMES[child.Name] then
+        if child:IsA("Tool") and (child.Name == TARGET_TOOL_NAME or child.Name == NEW_TOOL_NAME) then
             task.defer(function()
-                applyM9Once(child)
+                processTool(child)
             end)
         end
     end
@@ -249,9 +280,9 @@ local function onCharacterAdded(character)
     watchContainer(character)
 
     task.delay(1, function()
-        local tool = character:FindFirstChild("M9") or character:FindFirstChild("8 Bit")
+        local tool = character:FindFirstChild(TARGET_TOOL_NAME) or character:FindFirstChild(NEW_TOOL_NAME)
         if tool then
-            applyM9Once(tool)
+            processTool(tool)
         end
     end)
 end
@@ -261,18 +292,3 @@ player.CharacterAdded:Connect(onCharacterAdded)
 if player.Character then
     onCharacterAdded(player.Character)
 end
-
-RunService.RenderStepped:Connect(function()
-    local character = player.Character
-    if not character then return end
-    
-    local tool = character:FindFirstChildOfClass("Tool")
-    if tool and TOOL_NAMES[tool.Name] then
-        local handle = tool:FindFirstChild("Handle")
-        local mesh = tool:FindFirstChild("Meshes/M9_3", true)
-        
-        if handle and mesh then
-            mesh.CFrame = handle.CFrame * MESH_ROTATION
-        end
-    end
-end)
