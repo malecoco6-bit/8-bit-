@@ -1,4 +1,15 @@
--- imgui library
+-- ==========================================================
+-- DEAR IMGUI-STYLE ROBLOX UI LIBRARY
+-- Usage:
+--   local ImGuiLib = loadstring(game:HttpGet("YOUR_RAW_URL"))()
+--   local Window = ImGuiLib.new("My Window")
+--   local Tab = Window:AddTab("Main")
+--   Tab:AddCheckbox("Name", false, function(state) end)
+--   Tab:AddSlider("Name", min, max, default, step, function(value) end)
+--   Tab:AddDropdown("Name", {"A", "B"}, "A", function(option) end)
+--   Window:Destroy()
+-- ==========================================================
+
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
@@ -467,6 +478,14 @@ function ImGuiLib:AddTab(tabName)
 	end
 
 	function tabProxy:AddSlider(name, min, max, defaultVal, step, callback)
+		-- Allow calling without a step: AddSlider(name, min, max, default, callback)
+		if type(step) == "function" then
+			callback = step
+			step = 1
+		end
+		if type(step) ~= "number" or step <= 0 then
+			step = 1
+		end
 		local value = math.clamp(defaultVal or min, min, max)
 		local frameH = Style.FrameHeight
 		local range = math.max(max - min, 1)
@@ -532,8 +551,7 @@ function ImGuiLib:AddTab(tabName)
 			if travel <= 0 then return end
 			local alpha = math.clamp((mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2) / travel, 0, 1)
 			local raw = min + alpha * range
-			local stepSize = (step and step > 0) and step or 1
-			local newValue = math.clamp(math.floor(raw / stepSize + 0.5) * stepSize, min, max)
+			local newValue = math.clamp(math.floor((raw - min) / step + 0.5) * step + min, min, max)
 			if newValue ~= value then
 				value = newValue
 				refresh()
