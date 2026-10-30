@@ -20,7 +20,29 @@ local originalAutoFires = setmetatable({}, {__mode = "k"})
 local originalSoundIds = setmetatable({}, {__mode = "k"})
 local processedTools = setmetatable({}, {__mode = "k"})
 
--- Spawns the tracer strictly inside the local client's camera viewport (Client-Side Only)
+-- Tracks if YOU are currently holding down or pressing shoot on your 8 Bit tool
+local isLocallyFiring = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local character = player.Character
+        if character then
+            local tool = character:FindFirstChildOfClass("Tool")
+            if tool and (tool.Name == TARGET_TOOL_NAME or tool.Name == NEW_TOOL_NAME) then
+                isLocallyFiring = true
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isLocallyFiring = false
+    end
+end)
+
+-- Spawns the custom red tracer strictly inside your camera viewport when you fire
 local function spawnLocalNeonTracer(origin, target)
     local camera = workspace.CurrentCamera
     if not camera then return end
@@ -51,25 +73,6 @@ local function spawnLocalNeonTracer(origin, target)
     end)
 end
 
--- FIXED: Strictly checks active tool ownership and handle connection to prevent other players from triggering it
-local function IsLocalPlayerFiring(origin)
-    local character = player.Character
-    if not character then return false end
-
-    local tool = character:FindFirstChildOfClass("Tool")
-    if tool and (tool.Name == TARGET_TOOL_NAME or tool.Name == NEW_TOOL_NAME) then
-        local handle = tool:FindFirstChild("Handle")
-        if handle then
-            -- Checks if the origin is tightly bound to your specific tool handle's position
-            if (handle.Position - origin).Magnitude < 6 then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
 local successGunTracers, GunTracers = pcall(function()
     return require(
         ReplicatedStorage:WaitForChild("SharedModules")
@@ -81,7 +84,8 @@ if successGunTracers and GunTracers then
     if rawget(GunTracers, "createBullet") then
         local old = GunTracers.createBullet
         GunTracers.createBullet = function(origin, target, ...)
-            if IsLocalPlayerFiring(origin) then
+            -- Only override if YOU are actively clicking/firing your gun right now
+            if isLocallyFiring then
                 spawnLocalNeonTracer(origin, target)
                 return
             end
@@ -92,7 +96,7 @@ if successGunTracers and GunTracers then
     if rawget(GunTracers, "createSniper") then
         local oldSniper = GunTracers.createSniper
         GunTracers.createSniper = function(origin, target, ...)
-            if IsLocalPlayerFiring(origin) then
+            if isLocallyFiring then
                 spawnLocalNeonTracer(origin, target)
                 return
             end
@@ -103,7 +107,7 @@ if successGunTracers and GunTracers then
     if rawget(GunTracers, "createTaser") then
         local oldTaser = GunTracers.createTaser
         GunTracers.createTaser = function(origin, target, ...)
-            if IsLocalPlayerFiring(origin) then
+            if isLocallyFiring then
                 spawnLocalNeonTracer(origin, target)
                 return
             end
