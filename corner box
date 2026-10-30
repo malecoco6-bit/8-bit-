@@ -9,7 +9,7 @@ local Camera = workspace.CurrentCamera
 
 local ESP_Cache = {}
 
--- Track feature-specific states based on your checkboxes
+-- Toggle states controlled by your UI checkboxes
 local CornerBoxActive = false
 local HealthBarActive = false
 
@@ -57,7 +57,7 @@ end)
 
 -- Main Render Loop for ESP Calculations
 RunService.RenderStepped:Connect(function()
-	-- If both features are turned off, skip processing entirely to save performance
+	-- If both features are turned off, hide everything and skip calculations to save performance
 	if not CornerBoxActive and not HealthBarActive then
 		for _, objects in pairs(ESP_Cache) do
 			for _, obj in pairs(objects) do
@@ -94,7 +94,7 @@ RunService.RenderStepped:Connect(function()
 						local x = topPos.X - width / 2
 						local y = topPos.Y
 
-						-- Corner Box Logic (Only runs if CornerBox is enabled)
+						-- Corner Box Calculations
 						if CornerBoxActive then
 							local lineLen = math.clamp(width / 4, 4, 12)
 							local corners = {
@@ -121,13 +121,12 @@ RunService.RenderStepped:Connect(function()
 								objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
 							end
 						else
-							-- Hide Corner Box lines if disabled
 							for _, name in ipairs({"TL1_O", "TL2_O", "TR1_O", "TR2_O", "BL1_O", "BL2_O", "BR1_O", "BR2_O", "TL1", "TL2", "TR1", "TR2", "BL1", "BL2", "BR1", "BR2"}) do
 								objects[name].Visible = false
 							end
 						end
 
-						-- Health Bar Side ESP Logic (Only runs if HealthBar is enabled)
+						-- Health Bar Side ESP Logic
 						if HealthBarActive then
 							local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
 							local barX = x - 6
@@ -161,7 +160,7 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Return control functions for your UI checkboxes
+-- Return control functions so your UI checkboxes can talk to this script
 return {
 	CornerBox = function(state)
 		CornerBoxActive = state
