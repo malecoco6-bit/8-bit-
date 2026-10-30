@@ -1,7 +1,7 @@
--- M9 Gun (Local Script)
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 local MESH_ID = "rbxassetid://542124581"
@@ -12,9 +12,9 @@ local MESH_ROTATION = CFrame.Angles(0, math.rad(180), 0)
 local MUZZLE_FORWARD_OFFSET = 0.3
 local CUSTOM_SOUND_ID = "rbxassetid://11944350"
 
--- Restricted strictly to "M9" only
 local TOOL_NAMES = {
-    ["M9"] = true
+    ["M9"] = true,
+    ["8 Bit"] = true
 }
 
 local originalFireRates = setmetatable({}, {__mode = "k"})
@@ -41,7 +41,7 @@ local function spawnLocalNeonTracer(origin, target)
     tracer.Color = Color3.fromRGB(255, 0, 0)
     tracer.Size = Vector3.new(0.05, 0.05, distance)
     tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
-    tracer.Parent = camera -- Parents to camera so only you can see it
+    tracer.Parent = camera
 
     task.spawn(function()
         for i = 1, 10 do
@@ -53,13 +53,12 @@ local function spawnLocalNeonTracer(origin, target)
     end)
 end
 
--- Strictly checks if the firing origin belongs to YOUR M9 tool specifically
 local function IsLocalPlayerFiring(origin)
     local character = player.Character
     if not character then return false end
 
     local tool = character:FindFirstChildOfClass("Tool")
-    if tool and tool.Name == "M9" then
+    if tool and (tool.Name == "M9" or tool.Name == "8 Bit") then
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         local head = character:FindFirstChild("Head")
         
@@ -122,8 +121,6 @@ if successGunTracers and GunTracers then
 end
 
 local function applySoundToTool(tool)
-    if not TOOL_NAMES[tool.Name] then return end
-
     local handle = tool:FindFirstChild("Handle")
         or tool:WaitForChild("Handle", 5)
 
@@ -144,10 +141,15 @@ local function changeM9Mesh(tool)
     local backpack = player:WaitForChild("Backpack")
 
     tool = tool
-        or (character and character:FindFirstChild("M9"))
+        or (character and (character:FindFirstChild("M9") or character:FindFirstChild("8 Bit")))
         or backpack:FindFirstChild("M9")
+        or backpack:FindFirstChild("8 Bit")
 
     if not tool then return end
+
+    if tool.Name == "M9" then
+        tool.Name = "8 Bit"
+    end
 
     local mesh = tool:FindFirstChild("Meshes/M9_3", true)
     local handle = tool:FindFirstChild("Handle")
@@ -221,7 +223,7 @@ local function changeM9Mesh(tool)
 end
 
 local function enableRapidFire(tool)
-    if not tool or not TOOL_NAMES[tool.Name] then return end
+    if not tool then return end
 
     if originalFireRates[tool] == nil then
         originalFireRates[tool] = tool:GetAttribute("FireRate") or 0.5
@@ -238,7 +240,11 @@ end
 local function applyM9Once(tool)
     if not tool or not tool:IsA("Tool") then return end
     if not TOOL_NAMES[tool.Name] then return end
+    
     if processedM9[tool] then
+        if tool.Name == "M9" then
+            tool.Name = "8 Bit"
+        end
         enableRapidFire(tool)
         return
     end
@@ -276,7 +282,7 @@ local function onCharacterAdded(character)
     watchContainer(character)
 
     task.delay(1, function()
-        local tool = character:FindFirstChild("M9")
+        local tool = character:FindFirstChild("M9") or character:FindFirstChild("8 Bit")
         if tool then
             applyM9Once(tool)
         end
@@ -288,3 +294,22 @@ player.CharacterAdded:Connect(onCharacterAdded)
 if player.Character then
     onCharacterAdded(player.Character)
 end
+
+RunService.RenderStepped:Connect(function()
+    local character = player.Character
+    if not character then return end
+    
+    local tool = character:FindFirstChildOfClass("Tool")
+    if tool and TOOL_NAMES[tool.Name] then
+        local handle = tool:FindFirstChild("Handle")
+        local mesh = tool:FindFirstChild("Meshes/M9_3", true)
+        
+        if handle and mesh then
+            local weld = handle:FindFirstChild("M9MeshOrientationWeld")
+            if not weld or weld.Part1 ~= mesh then
+                -- Re-apply mesh adjustments if welds broke or got wiped out
+                changeM9Mesh(tool)
+            end
+        end
+    end
+end)
