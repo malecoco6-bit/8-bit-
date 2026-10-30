@@ -900,7 +900,7 @@ function ImGuiLib:AddTab(tabName)
 					Combo.AbsolutePosition.X - main.AbsolutePosition.X,
 					Combo.AbsolutePosition.Y
 						+ Combo.AbsoluteSize.Y
-						- main.AbsolutePosition.Y
+					- main.AbsolutePosition.Y
 				)
 
 				Popup.Size = UDim2.fromOffset(
@@ -1018,8 +1018,11 @@ function ImGuiLib:AddTab(tabName)
 	return tabProxy
 end
 
--- ==========================================================
--- EXPORT LIBRARY
--- ==========================================================
+local ImGuiLib = {}
 
+function ImGuiLib.new(title)
+	-- Your window creation code goes here.
+end
+
+-- Keep your existing library methods above this line.
 return ImGuiLib
