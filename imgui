@@ -1,14 +1,3 @@
--- ==========================================================
--- DEAR IMGUI-STYLE ROBLOX UI LIBRARY
--- Usage:
---   local ImGuiLib = loadstring(game:HttpGet("YOUR_RAW_URL"))()
---   local Window = ImGuiLib.new("My Window")
---   local Tab = Window:AddTab("Main")
---   Tab:AddCheckbox("Name", false, function(state) end)
---   Tab:AddSlider("Name", min, max, default, step, function(value) end)
---   Tab:AddDropdown("Name", {"A", "B"}, "A", function(option) end)
---   Window:Destroy()
--- ==========================================================
 
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -422,7 +411,12 @@ function ImGuiLib:AddTab(tabName)
 	end
 
 	function tabProxy:AddCheckbox(name, defaultState, callback)
-		local toggled = defaultState or false
+		-- Allow AddCheckbox(name, callback)
+		if type(defaultState) == "function" then
+			callback = defaultState
+			defaultState = false
+		end
+		local toggled = defaultState and true or false
 		local size = Style.FrameHeight
 
 		local Row = create("TextButton", {
@@ -589,6 +583,11 @@ function ImGuiLib:AddTab(tabName)
 	tabProxy.AddArrowSlider = tabProxy.AddSlider
 
 	function tabProxy:AddDropdown(name, options, defaultOption, callback)
+		-- Allow AddDropdown(name, options, callback)
+		if type(defaultOption) == "function" then
+			callback = defaultOption
+			defaultOption = nil
+		end
 		local selected = defaultOption or options[1]
 		local frameH = Style.FrameHeight
 		local itemH = 18
