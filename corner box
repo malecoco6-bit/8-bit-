@@ -1,5 +1,5 @@
 -- ==========================================================
--- COMBINED CORNER BOX & HEALTH BAR ESP MODULE
+-- COMBINED CORNER BOX & HEALTH BAR ESP MODULE (FIXED)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -78,11 +78,11 @@ RunService.RenderStepped:Connect(function()
 			local hrp = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-			local renderESP = false
+			local shouldRender = false
 			if character and hrp and humanoid and humanoid.Health > 0 then
 				local _, onScreen = Camera:WorldToViewportPoint(hrp.Position)
 				if onScreen then
-					renderESP = true
+					shouldRender = true
 
 					local cf, size = character:GetBoundingBox()
 					local topPos, topVis = Camera:WorldToViewportPoint((cf + Vector3.new(0, size.Y / 2, 0)).Position)
@@ -94,12 +94,12 @@ RunService.RenderStepped:Connect(function()
 						local x = topPos.X - width / 2
 						local y = topPos.Y
 
-						-- Corner Box Calculations
+						-- Corner Box Logic
 						if CornerBoxActive then
 							local lineLen = math.clamp(width / 4, 4, 12)
 							local corners = {
 								{{Vector2.new(x, y), Vector2.new(x + lineLen, y)}, {Vector2.new(x, y), Vector2.new(x, y + lineLen)}},
-								{{Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)}, {Vector2.new(x + width, y), {x + width, y + lineLen}}},
+								{{Vector2.new(x + width, y), Vector2.new(x + width - lineLen, y)}, {Vector2.new(x + width, y), Vector2.new(x + width, y + lineLen)}},
 								{{Vector2.new(x, y + height), Vector2.new(x + lineLen, y + height)}, {Vector2.new(x, y + height), Vector2.new(x, y + height - lineLen)}},
 								{{Vector2.new(x + width, y + height), Vector2.new(x + width - lineLen, y + height)}, {Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - lineLen)}}
 							}
@@ -121,6 +121,7 @@ RunService.RenderStepped:Connect(function()
 								objects[k.."2"].From, objects[k.."2"].To = corner[2][1], corner[2][2]
 							end
 						else
+							-- Hide only corner box elements if disabled
 							for _, name in ipairs({"TL1_O", "TL2_O", "TR1_O", "TR2_O", "BL1_O", "BL2_O", "BR1_O", "BR2_O", "TL1", "TL2", "TR1", "TR2", "BL1", "BL2", "BR1", "BR2"}) do
 								objects[name].Visible = false
 							end
@@ -146,12 +147,13 @@ RunService.RenderStepped:Connect(function()
 							objects.HealthBar.Visible = false
 						end
 					else
-						renderESP = false
+						shouldRender = false
 					end
 				end
 			end
 
-			if not renderESP then
+			-- If out of bounds or dead, cleanly hide everything for this player
+			if not shouldRender then
 				for _, obj in pairs(objects) do
 					obj.Visible = false
 				end
@@ -160,7 +162,7 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Return control functions so your UI checkboxes can talk to this script
+-- Return control functions to your UI checkboxes
 return {
 	CornerBox = function(state)
 		CornerBoxActive = state
