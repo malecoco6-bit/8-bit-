@@ -653,9 +653,11 @@ function ImGuiLib:AddTab(tabName)
 		return Row
 	end
 
+
 	-- FIXED DROPDOWN
 	function tabProxy:AddDropdown(name, options, defaultOption, callback)
-		assert(type(options) == "table" and #options > 0, "Dropdown requires options")
+		assert(type(options) == "table" and #options > 0,
+			"Dropdown requires options")
 
 		local selected = defaultOption
 		local validDefault = false
@@ -674,6 +676,7 @@ function ImGuiLib:AddTab(tabName)
 		local frameH = Style.FrameHeight
 		local itemH = 24
 		local popupPad = 3
+		local maxPopupHeight = 220
 
 		local Row = create("Frame", {
 			Size = UDim2.new(1, 0, 0, frameH),
@@ -696,6 +699,7 @@ function ImGuiLib:AddTab(tabName)
 			Position = UDim2.fromOffset(Style.FramePaddingX, 0),
 			Size = UDim2.new(1, -(frameH + Style.FramePaddingX), 1, 0),
 			Text = tostring(selected),
+			TextTruncate = Enum.TextTruncate.AtEnd,
 			ZIndex = 6,
 		})
 
@@ -719,23 +723,36 @@ function ImGuiLib:AddTab(tabName)
 			Text = name,
 		})
 
-		local Popup = create("Frame", {
-			Size = UDim2.fromOffset(
-				100,
-				#options * itemH + popupPad * 2
-			),
+		local Popup = create("ScrollingFrame", {
+			Size = UDim2.fromOffset(100, 100),
+			BackgroundColor3 = Style.PopupBg[1],
+			BackgroundTransparency = Style.PopupBg[2],
 			BorderSizePixel = 0,
 			Visible = false,
 			Active = true,
+			ScrollingEnabled = true,
+			ScrollBarThickness = 6,
+			ScrollBarImageColor3 = Style.ScrollbarGrab,
+			CanvasSize = UDim2.fromOffset(0, 0),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
 			ZIndex = 500,
 		}, window.PopupLayer)
-
-		paint(Popup, Style.PopupBg)
 
 		create("UIStroke", {
 			Color = Style.Border[1],
 			Transparency = Style.Border[2],
 			Thickness = 1,
+		}, Popup)
+
+		create("UIPadding", {
+			PaddingTop = UDim.new(0, popupPad),
+			PaddingBottom = UDim.new(0, popupPad),
+		}, Popup)
+
+		create("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 0),
 		}, Popup)
 
 		local items = {}
@@ -754,40 +771,74 @@ function ImGuiLib:AddTab(tabName)
 		end
 
 		local function updatePosition()
-			local pos = Combo.AbsolutePosition
-			local size = Combo.AbsoluteSize
-			local popupHeight = #options * itemH + popupPad * 2
-			local screenSize = window.ScreenGui.AbsoluteSize
-
-			local x = math.clamp(
-				pos.X,
-				0,
-				math.max(0, screenSize.X - size.X)
-			)
-
-			local y = pos.Y + size.Y
-
-			if y + popupHeight > screenSize.Y then
-				y = math.max(0, pos.Y - popupHeight)
+			if not Combo.Parent then
+				return
 			end
 
+			local comboPos = Combo.AbsolutePosition
+			local comboSize = Combo.AbsoluteSize
+			local screenSize = window.ScreenGui.AbsoluteSize
+
+			local availableBelow = screenSize.Y
+				- (comboPos.Y + comboSize.Y)
+			local availableAbove = comboPos.Y
+
+			local totalHeight = #options * itemH + popupPad * 2
+			local popupHeight = math.min(totalHeight, maxPopupHeight)
+
+			local showAbove = availableBelow < popupHeight
+				and availableAbove > availableBelow
+
+			local availableSpace = showAbove
+				and availableAbove
+				or availableBelow
+
+			popupHeight = math.max(
+				0,
+				math.min(popupHeight, availableSpace - 4)
+			)
+
+			local x = math.clamp(
+				comboPos.X,
+				0,
+				math.max(0, screenSize.X - comboSize.X)
+			)
+
+			local y
+
+			if showAbove then
+				y = comboPos.Y - popupHeight
+			else
+				y = comboPos.Y + comboSize.Y
+			end
+
+			y = math.clamp(
+				y,
+				0,
+				math.max(0, screenSize.Y - popupHeight)
+			)
+
 			Popup.Position = UDim2.fromOffset(x, y)
-			Popup.Size = UDim2.fromOffset(size.X, popupHeight)
+			Popup.Size = UDim2.fromOffset(comboSize.X, popupHeight)
+			Popup.CanvasPosition = Vector2.new(0, 0)
 		end
 
 		local function setOpen(state)
-			open = state
+			if state == open then
+				return
+			end
 
 			if state then
 				for _, closePopup in ipairs(window.ClosePopups) do
 					closePopup()
 				end
 
-				-- Register this dropdown again after closing any others.
+				open = true
 				updatePosition()
 				Popup.Visible = true
 				refreshItems()
 			else
+				open = false
 				Popup.Visible = false
 			end
 
@@ -795,6 +846,8 @@ function ImGuiLib:AddTab(tabName)
 				Combo,
 				open and Style.FrameBgHovered or Style.FrameBg
 			)
+
+			ArrowButton.Text = open and "▲" or "▼"
 		end
 
 		for index, option in ipairs(options) do
@@ -804,11 +857,7 @@ function ImGuiLib:AddTab(tabName)
 			}
 
 			item.Button = create("TextButton", {
-				Position = UDim2.fromOffset(
-					0,
-					popupPad + (index - 1) * itemH
-				),
-				Size = UDim2.new(1, 0, 0, itemH),
+				Size = UDim2.new(1, -2, 0, itemH),
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				AutoButtonColor = false,
@@ -817,9 +866,16 @@ function ImGuiLib:AddTab(tabName)
 				TextSize = Style.FontSize,
 				Font = Style.Font,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				LayoutOrder = index,
 				ZIndex = 501,
 				Active = true,
 			}, Popup)
+
+			create("UIPadding", {
+				PaddingLeft = UDim.new(0, Style.FramePaddingX),
+				PaddingRight = UDim.new(0, Style.FramePaddingX),
+			}, item.Button)
 
 			item.Button.MouseEnter:Connect(function()
 				item.Hovered = true
@@ -831,18 +887,16 @@ function ImGuiLib:AddTab(tabName)
 				refreshItems()
 			end)
 
-			item.Button.MouseButton1Click:Connect(function()
+			item.Button.Activated:Connect(function()
 				selected = option
-
-				-- Immediately update the visible selection.
 				SelectedText.Text = tostring(selected)
-				refreshItems()
-				setOpen(false)
 
-				print(name .. " selected:", selected)
+				setOpen(false)
+				refreshItems()
 
 				if callback then
 					local ok, err = pcall(callback, selected)
+
 					if not ok then
 						warn("Dropdown callback error:", err)
 					end
@@ -852,52 +906,62 @@ function ImGuiLib:AddTab(tabName)
 			table.insert(items, item)
 		end
 
-		Combo.MouseButton1Click:Connect(function()
+		Combo.Activated:Connect(function()
 			setOpen(not open)
 		end)
 
-		-- Clicking outside the popup closes it without consuming
-		-- the click intended for another control.
+		-- Close when clicking outside, without deferring the test.
 		local outsideConnection = UserInputService.InputBegan:Connect(function(input)
-			if not open or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			if not open then
 				return
 			end
 
-			task.defer(function()
-				if not open then
-					return
-				end
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1
+				and input.UserInputType ~= Enum.UserInputType.Touch then
+				return
+			end
 
-				local point = UserInputService:GetMouseLocation()
+			local point
 
-				if not isInside(Popup, point) and not isInside(Combo, point) then
-					setOpen(false)
-				end
-			end)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				point = input.Position
+			else
+				point = UserInputService:GetMouseLocation()
+			end
+
+			if not isInside(Popup, point) and not isInside(Combo, point) then
+				setOpen(false)
+			end
 		end)
 
 		table.insert(window._connections, outsideConnection)
 
-		local scrollConnection = TabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+		local function refreshPopupPosition()
 			if open then
 				updatePosition()
 			end
-		end)
+		end
 
-		table.insert(window._connections, scrollConnection)
+		table.insert(window._connections,
+			Combo:GetPropertyChangedSignal("AbsolutePosition"):Connect(
+				refreshPopupPosition
+			)
+		)
 
-		local positionConnection = Combo:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-			if open then
-				updatePosition()
-			end
-		end)
+		table.insert(window._connections,
+			Combo:GetPropertyChangedSignal("AbsoluteSize"):Connect(
+				refreshPopupPosition
+			)
+		)
 
-		table.insert(window._connections, positionConnection)
+		table.insert(window._connections,
+			TabContent:GetPropertyChangedSignal("CanvasPosition"):Connect(
+				refreshPopupPosition
+			)
+		)
 
 		table.insert(window.ClosePopups, function()
-			if open then
-				setOpen(false)
-			end
+			setOpen(false)
 		end)
 
 		local api = {}
@@ -921,7 +985,6 @@ function ImGuiLib:AddTab(tabName)
 
 		return api
 	end
-
 	return tabProxy
 end
 
