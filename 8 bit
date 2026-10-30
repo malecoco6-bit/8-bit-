@@ -1,4 +1,4 @@
--- 8 Bit Gun M9
+-- 8 bit
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -53,25 +53,19 @@ local function spawnLocalNeonTracer(origin, target)
     end)
 end
 
+-- Strictly validates that the firing origin belongs to YOUR equipped tool handle
 local function IsLocalPlayerFiring(origin)
     local character = player.Character
     if not character then return false end
 
     local tool = character:FindFirstChildOfClass("Tool")
-    if tool and (tool.Name == "M9" or tool.Name == "8 Bit") then
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        local head = character:FindFirstChild("Head")
-        
-        if rootPart and (rootPart.Position - origin).Magnitude < 12 then
-            return true
-        end
-        if head and (head.Position - origin).Magnitude < 12 then
-            return true
-        end
-
+    if tool and TOOL_NAMES[tool.Name] then
         local handle = tool:FindFirstChild("Handle")
-        if handle and (handle.Position - origin).Magnitude < 8 then
-            return true
+        if handle then
+            -- Checks if the firing origin matches your handle's current position precisely
+            if (handle.Position - origin).Magnitude < 4 then
+                return true
+            end
         end
     end
 
@@ -165,19 +159,18 @@ local function setupM9MeshAndWelds(tool)
         mesh.TextureID = TEXTURE_ID
         mesh.Size = TARGET_SIZE
 
-        -- Clean up old custom welds to prevent overlapping/jittering
         for _, obj in ipairs(tool:GetDescendants()) do
             if obj.Name == "M9MeshOrientationWeld" or obj.Name == "MuzzlePositionWeld" then
                 obj:Destroy()
             end
         end
 
-        -- Use a WeldConstraint for solid physics-bound alignment
         local meshWeld = Instance.new("WeldConstraint")
         meshWeld.Name = "M9MeshOrientationWeld"
         meshWeld.Part0 = handle
         meshWeld.Part1 = mesh
         meshWeld.Parent = handle
+
         mesh.CFrame = handle.CFrame * MESH_ROTATION
 
         if muzzle and muzzle:IsA("BasePart") then
