@@ -1,8 +1,11 @@
 -- 8 Bit
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local ContentProvider = game:GetService("ContentProvider")
 local player = Players.LocalPlayer
 
+-- // Config
 local MESH_ID = "rbxassetid://542124581"
 local TEXTURE_ID = "rbxassetid://542125034"
 local TARGET_SIZE = Vector3.new(2.2, 9, 20)
@@ -13,242 +16,374 @@ local CUSTOM_SOUND_ID = "rbxassetid://11944350"
 
 local TARGET_TOOL_NAME = "M9"
 local NEW_TOOL_NAME = "8 Bit"
+local MESH_NAME = "Meshes/M9_3"
+
+local TRACER_MATCH_DISTANCE = 4 -- how close a shot must start to YOUR gun to count as yours
+local FIRE_WINDOW = 0.6         -- seconds after your last click/tap that a shot still counts as yours
+
+local env = getgenv()
+
+-- // Re-execute cleanup (stops hooks/connections from stacking if the script runs twice)
+if env.__EightBitCleanup then
+	pcall(env.__EightBitCleanup)
+end
+
+local connections = {}
+local function track(connection)
+	table.insert(connections, connection)
+	return connection
+end
+
+env.__EightBitProcessed = env.__EightBitProcessed or setmetatable({}, {__mode = "k"})
+local processedTools = env.__EightBitProcessed          -- tools whose mesh was fully replaced
+local processing = setmetatable({}, {__mode = "k"})      -- tools being processed right now
 
 local originalFireRates = setmetatable({}, {__mode = "k"})
 local originalAutoFires = setmetatable({}, {__mode = "k"})
 local originalSoundIds = setmetatable({}, {__mode = "k"})
-local processedTools = setmetatable({}, {__mode = "k"})
 
--- Spawns the red tracer strictly inside your camera viewport (Client-Side Only)
+-- ==========================================================
+-- FIRING DETECTION (so only YOUR shots get the custom tracer)
+-- ==========================================================
+
+local lastInputTime = 0
+
+track(UserInputService.InputBegan:Connect(function(input)
+	local inputType = input.UserInputType
+	if inputType == Enum.UserInputType.MouseButton1
+		or inputType == Enum.UserInputType.Touch
+		or (inputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.ButtonR2) then
+		lastInputTime = os.clock()
+	end
+end))
+
+local function isFiringNow()
+	return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+		or (os.clock() - lastInputTime) < FIRE_WINDOW
+end
+
+local function getWorldPosition(instance)
+	if instance:IsA("Attachment") then
+		return instance.WorldPosition
+	elseif instance:IsA("BasePart") then
+		return instance.Position
+	end
+	return nil
+end
+
+-- True only when: you hold the gun, you're actually firing, and the shot starts at YOUR muzzle/handle
+local function isMyShot(origin)
+	if typeof(origin) ~= "Vector3" then return false end
+
+	local character = player.Character
+	local tool = character and character:FindFirstChildOfClass("Tool")
+	if not tool or (tool.Name ~= TARGET_TOOL_NAME and tool.Name ~= NEW_TOOL_NAME) then return false end
+	if not isFiringNow() then return false end
+
+	local references = {tool:FindFirstChild("Muzzle", true), tool:FindFirstChild("Handle")}
+	for _, reference in pairs(references) do
+		local position = reference and getWorldPosition(reference)
+		if position and (position - origin).Magnitude < TRACER_MATCH_DISTANCE then
+			return true
+		end
+	end
+	return false
+end
+
+-- ==========================================================
+-- LOCAL-ONLY RED TRACER (parented to your camera, nobody else can see it)
+-- ==========================================================
+
 local function spawnLocalNeonTracer(origin, target)
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-    
-    local distance = (origin - target).Magnitude
-    if distance <= 0 then return end
+	local camera = workspace.CurrentCamera
+	if not camera then return end
 
-    local tracer = Instance.new("Part")
-    tracer.Name = "LocalNeonTracer"
-    tracer.Anchored = true
-    tracer.CanCollide = false
-    tracer.CanTouch = false
-    tracer.CanQuery = false
-    tracer.CastShadow = false
-    tracer.Material = Enum.Material.Neon
-    tracer.Color = Color3.fromRGB(255, 0, 0)
-    tracer.Size = Vector3.new(0.05, 0.05, distance)
-    tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
-    tracer.Parent = camera
+	local distance = (origin - target).Magnitude
+	if distance <= 0 then return end
 
-    task.spawn(function()
-        for i = 1, 10 do
-            if not tracer.Parent then break end
-            tracer.Transparency = i / 10
-            task.wait(0.015)
-        end
-        tracer:Destroy()
-    end)
+	local tracer = Instance.new("Part")
+	tracer.Name = "LocalNeonTracer"
+	tracer.Anchored = true
+	tracer.CanCollide = false
+	tracer.CanTouch = false
+	tracer.CanQuery = false
+	tracer.CastShadow = false
+	tracer.Material = Enum.Material.Neon
+	tracer.Color = Color3.fromRGB(255, 0, 0)
+	tracer.Size = Vector3.new(0.05, 0.05, distance)
+	tracer.CFrame = CFrame.new(origin, target) * CFrame.new(0, 0, -distance / 2)
+	tracer.Parent = camera
+
+	task.spawn(function()
+		for i = 1, 10 do
+			if not tracer.Parent then break end
+			tracer.Transparency = i / 10
+			task.wait(0.015)
+		end
+		tracer:Destroy()
+	end)
 end
 
 -- Safely hooks into the game's GunTracers module
 local successGunTracers, GunTracers = pcall(function()
-    return require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("GunTracers"))
+	return require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("GunTracers"))
 end)
 
-if successGunTracers and GunTracers then
-    local function wrapTracerFunction(funcName)
-        if rawget(GunTracers, funcName) then
-            local oldFunc = GunTracers[funcName]
-            GunTracers[funcName] = function(origin, target, ...)
-                local character = player.Character
-                if character then
-                    local equippedTool = character:FindFirstChildOfClass("Tool")
-                    -- Check if the player is actively holding your modified tool and the shot origin matches its muzzle/handle
-                    if equippedTool and (equippedTool.Name == TARGET_TOOL_NAME or equippedTool.Name == NEW_TOOL_NAME) then
-                        local handle = equippedTool:FindFirstChild("Handle")
-                        local muzzle = equippedTool:FindFirstChild("Muzzle", true)
-                        
-                        local isMyShot = false
-                        if muzzle and (muzzle.Position - origin).Magnitude < 4 then
-                            isMyShot = true
-                        elseif handle and (handle.Position - origin).Magnitude < 4 then
-                            isMyShot = true
-                        end
+env.__EightBitTracerOriginals = env.__EightBitTracerOriginals or {}
+local tracerOriginals = env.__EightBitTracerOriginals
 
-                        if isMyShot then
-                            spawnLocalNeonTracer(origin, target)
-                            return
-                        end
-                    end
-                end
-                return oldFunc(origin, target, ...)
-            end
-        end
-    end
+if successGunTracers and type(GunTracers) == "table" then
+	local function setTracerFunction(funcName, func)
+		local ok = pcall(function() GunTracers[funcName] = func end)
+		if not ok and setreadonly then
+			pcall(setreadonly, GunTracers, false)
+			pcall(function() GunTracers[funcName] = func end)
+		end
+	end
 
-    wrapTracerFunction("createBullet")
-    wrapTracerFunction("createSniper")
-    wrapTracerFunction("createTaser")
+	local function wrapTracerFunction(funcName)
+		local oldFunc = tracerOriginals[funcName] or rawget(GunTracers, funcName)
+		if type(oldFunc) ~= "function" then return end
+		tracerOriginals[funcName] = oldFunc
+
+		setTracerFunction(funcName, function(origin, target, ...)
+			-- Only replace the tracer for shots that are really yours.
+			-- Everyone else's shots go through the game's normal tracer untouched.
+			if typeof(target) == "Vector3" and isMyShot(origin) then
+				local ok = pcall(spawnLocalNeonTracer, origin, target)
+				if ok then return end
+			end
+			return oldFunc(origin, target, ...)
+		end)
+	end
+
+	wrapTracerFunction("createBullet")
+	wrapTracerFunction("createSniper")
+	wrapTracerFunction("createTaser")
 end
+
+-- ==========================================================
+-- SOUND / FIRE RATE
+-- ==========================================================
 
 local function applySoundToTool(tool)
-    local handle = tool:FindFirstChild("Handle") or tool:WaitForChild("Handle", 5)
-    if not handle then return end
+	local handle = tool:FindFirstChild("Handle")
+	local sound = tool:FindFirstChild("ShootSound", true) or (handle and handle:WaitForChild("ShootSound", 2))
 
-    local sound = handle:FindFirstChild("ShootSound")
-    if sound and sound:IsA("Sound") then
-        if originalSoundIds[sound] == nil then
-            originalSoundIds[sound] = sound.SoundId
-        end
-        sound.SoundId = CUSTOM_SOUND_ID
-    end
-end
-
-local function changeToolMesh(tool)
-    local character = player.Character
-    local backpack = player:WaitForChild("Backpack")
-
-    tool = tool
-        or (character and (character:FindFirstChild(TARGET_TOOL_NAME) or character:FindFirstChild(NEW_TOOL_NAME)))
-        or backpack:FindFirstChild(TARGET_TOOL_NAME)
-        or backpack:FindFirstChild(NEW_TOOL_NAME)
-
-    if not tool then return end
-
-    local mesh = tool:FindFirstChild("Meshes/M9_3", true)
-    local handle = tool:FindFirstChild("Handle")
-    local muzzle = tool:FindFirstChild("Muzzle", true)
-
-    if not mesh or not mesh:IsA("MeshPart") then return end
-    if not handle or not handle:IsA("BasePart") then return end
-
-    pcall(function()
-        applySoundToTool(tool)
-
-        mesh.MeshId = MESH_ID
-        mesh.TextureID = TEXTURE_ID
-        mesh.Size = TARGET_SIZE
-
-        local relativeCFrame = handle.CFrame:ToObjectSpace(mesh.CFrame)
-
-        for _, obj in ipairs(tool:GetDescendants()) do
-            if obj:IsA("WeldConstraint")
-                and (
-                    (obj.Part0 == handle and obj.Part1 == mesh)
-                    or (obj.Part1 == handle and obj.Part0 == mesh)
-                ) then
-                obj:Destroy()
-            end
-        end
-
-        mesh.CFrame = handle.CFrame * relativeCFrame * MESH_ROTATION
-
-        local weld = Instance.new("Weld")
-        weld.Name = "ToolMeshOrientationWeld"
-        weld.Part0 = handle
-        weld.Part1 = mesh
-        weld.C0 = handle.CFrame:ToObjectSpace(mesh.CFrame)
-        weld.C1 = CFrame.identity
-        weld.Parent = handle
-
-        if muzzle and muzzle:IsA("BasePart") then
-            local oldRelativeCFrame = handle.CFrame:ToObjectSpace(muzzle.CFrame)
-            local oldWelds = {}
-
-            for _, obj in ipairs(handle:GetChildren()) do
-                if obj:IsA("WeldConstraint")
-                    and (
-                        (obj.Part0 == handle and obj.Part1 == muzzle)
-                        or (obj.Part1 == handle and obj.Part0 == muzzle)
-                    ) then
-                    table.insert(oldWelds, obj)
-                end
-            end
-
-            for _, oldWeld in ipairs(oldWelds) do
-                oldWeld:Destroy()
-            end
-
-            local newRelativeCFrame = oldRelativeCFrame * CFrame.new(0, 0, -MUZZLE_FORWARD_OFFSET)
-            muzzle.CFrame = handle.CFrame * newRelativeCFrame
-
-            local newWeld = Instance.new("WeldConstraint")
-            newWeld.Name = "MuzzlePositionWeld"
-            newWeld.Part0 = handle
-            newWeld.Part1 = muzzle
-            newWeld.Parent = handle
-        end
-    end)
+	if sound and sound:IsA("Sound") then
+		if originalSoundIds[sound] == nil then
+			originalSoundIds[sound] = sound.SoundId
+		end
+		sound.SoundId = CUSTOM_SOUND_ID
+	end
 end
 
 local function enableRapidFire(tool)
-    if originalFireRates[tool] == nil then
-        originalFireRates[tool] = tool:GetAttribute("FireRate") or 0.5
-    end
+	if originalFireRates[tool] == nil then
+		originalFireRates[tool] = tool:GetAttribute("FireRate") or 0.5
+	end
 
-    if originalAutoFires[tool] == nil then
-        originalAutoFires[tool] = tool:GetAttribute("AutoFire") or false
-    end
+	if originalAutoFires[tool] == nil then
+		originalAutoFires[tool] = tool:GetAttribute("AutoFire") or false
+	end
 
-    tool:SetAttribute("FireRate", 0.08)
-    tool:SetAttribute("AutoFire", true)
+	tool:SetAttribute("FireRate", 0.08)
+	tool:SetAttribute("AutoFire", true)
+end
+
+-- ==========================================================
+-- MESH + WELD REPLACEMENT
+-- ==========================================================
+
+local function isJoint(object)
+	-- Weld, ManualWeld, Motor6D, Snap... and WeldConstraint
+	return object:IsA("JointInstance") or object:IsA("WeldConstraint")
+end
+
+-- Destroys every joint inside the tool that touches partA (and partB, if given)
+local function removeJoints(tool, partA, partB)
+	for _, object in ipairs(tool:GetDescendants()) do
+		if isJoint(object) then
+			local part0, part1 = object.Part0, object.Part1
+			if part0 == partA or part1 == partA then
+				if partB == nil or part0 == partB or part1 == partB then
+					object:Destroy()
+				end
+			end
+		end
+	end
+end
+
+local function findMesh(tool, handle)
+	local named = tool:FindFirstChild(MESH_NAME, true)
+	if named and named:IsA("MeshPart") then return named end
+
+	-- Fallback: use the only other MeshPart in the tool, if there's exactly one
+	local candidate
+	for _, descendant in ipairs(tool:GetDescendants()) do
+		if descendant:IsA("MeshPart") and descendant ~= handle then
+			if candidate then return nil end
+			candidate = descendant
+		end
+	end
+	return candidate
+end
+
+-- Waits for the handle and mesh to exist (they can load in after the tool does)
+local function waitForParts(tool, timeout)
+	local deadline = os.clock() + timeout
+	repeat
+		local handle = tool:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			local mesh = findMesh(tool, handle)
+			if mesh then return handle, mesh end
+		end
+		task.wait(0.1)
+	until os.clock() > deadline or not tool.Parent
+	return nil, nil
+end
+
+-- Keeps the mesh at TARGET_SIZE even if the engine resets it when the new mesh finishes loading
+local function lockMeshSize(mesh)
+	track(mesh:GetPropertyChangedSignal("Size"):Connect(function()
+		if (mesh.Size - TARGET_SIZE).Magnitude > 0.001 then
+			mesh.Size = TARGET_SIZE
+		end
+	end))
+end
+
+-- Returns true only when the whole swap succeeded
+local function changeToolMesh(tool)
+	local handle, mesh = waitForParts(tool, 5)
+	if not handle or not mesh then return false end
+
+	local muzzle = tool:FindFirstChild("Muzzle", true)
+	if muzzle and not muzzle:IsA("BasePart") then muzzle = nil end
+
+	applySoundToTool(tool)
+
+	-- Stop the oversized mesh from colliding, blocking shots, or adding weight
+	mesh.CanCollide = false
+	mesh.CanTouch = false
+	mesh.CanQuery = false
+	mesh.Massless = true
+
+	-- Swap the asset first and let it load. Everything that yields happens BEFORE
+	-- the welds are touched, so the mesh never falls off the gun mid-swap.
+	lockMeshSize(mesh)
+	mesh.MeshId = MESH_ID
+	mesh.TextureID = TEXTURE_ID
+	mesh.Size = TARGET_SIZE
+	pcall(function() ContentProvider:PreloadAsync({mesh}) end)
+
+	if not tool.Parent or not handle.Parent or not mesh.Parent then return false end
+	mesh.Size = TARGET_SIZE
+
+	-- From here on there are no yields: read offsets, remove old joints, add new ones.
+	local meshOffset = handle.CFrame:ToObjectSpace(mesh.CFrame)
+	local muzzleOffset = muzzle and handle.CFrame:ToObjectSpace(muzzle.CFrame)
+
+	-- Remove EVERY old joint between mesh and handle (Weld, Motor6D, WeldConstraint...)
+	removeJoints(tool, mesh, handle)
+
+	local newMeshOffset = meshOffset * MESH_ROTATION
+	mesh.CFrame = handle.CFrame * newMeshOffset
+
+	local meshWeld = Instance.new("Weld")
+	meshWeld.Name = "ToolMeshOrientationWeld"
+	meshWeld.Part0 = handle
+	meshWeld.Part1 = mesh
+	meshWeld.C0 = newMeshOffset
+	meshWeld.C1 = CFrame.identity
+	meshWeld.Parent = handle
+
+	if muzzle then
+		-- Remove EVERY old joint on the muzzle, including ones that tied it to the mesh
+		removeJoints(tool, muzzle, nil)
+
+		muzzle.Massless = true
+		muzzle.CFrame = handle.CFrame * muzzleOffset * CFrame.new(0, 0, -MUZZLE_FORWARD_OFFSET)
+
+		local muzzleWeld = Instance.new("WeldConstraint")
+		muzzleWeld.Name = "MuzzlePositionWeld"
+		muzzleWeld.Part0 = handle
+		muzzleWeld.Part1 = muzzle
+		muzzleWeld.Parent = handle
+	end
+
+	return true
 end
 
 local function processTool(tool)
-    if not tool or not tool:IsA("Tool") then return end
-    if tool.Name ~= TARGET_TOOL_NAME and tool.Name ~= NEW_TOOL_NAME then return end
+	if not tool or not tool:IsA("Tool") then return end
+	if tool.Name ~= TARGET_TOOL_NAME and tool.Name ~= NEW_TOOL_NAME then return end
+	if processing[tool] then return end -- another thread is already working on this tool
 
-    if processedTools[tool] then
-        enableRapidFire(tool)
-        if tool.Name == TARGET_TOOL_NAME then
-            tool.Name = NEW_TOOL_NAME
-        end
-        return
-    end
+	if not processedTools[tool] then
+		processing[tool] = true
+		local ok, done = pcall(changeToolMesh, tool)
+		processing[tool] = nil
 
-    changeToolMesh(tool)
-    processedTools[tool] = true
-    enableRapidFire(tool)
+		-- Not finished (mesh missing, tool removed...): don't mark it as done,
+		-- it will be retried the next time the tool is added/equipped.
+		if not ok or not done then return end
+		processedTools[tool] = true
+	end
 
-    tool.Name = NEW_TOOL_NAME
+	enableRapidFire(tool)
+
+	if tool.Name == TARGET_TOOL_NAME then
+		tool.Name = NEW_TOOL_NAME
+	end
 end
+
+-- ==========================================================
+-- WATCHERS
+-- ==========================================================
 
 local function watchContainer(container)
-    container.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") and (child.Name == TARGET_TOOL_NAME or child.Name == NEW_TOOL_NAME) then
-            task.delay(0.5, function()
-                if child.Parent then
-                    processTool(child)
-                end
-            end)
-        end
-    end)
+	track(container.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			task.spawn(processTool, child)
+		end
+	end))
 
-    for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("Tool") and (child.Name == TARGET_TOOL_NAME or child.Name == NEW_TOOL_NAME) then
-            task.defer(function()
-                processTool(child)
-            end)
-        end
-    end
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Tool") then
+			task.spawn(processTool, child)
+		end
+	end
 end
 
-local backpack = player:WaitForChild("Backpack")
-watchContainer(backpack)
+-- The Backpack is re-created on every respawn, so watch for the new one each time
+watchContainer(player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack"))
+
+track(player.ChildAdded:Connect(function(child)
+	if child:IsA("Backpack") then
+		watchContainer(child)
+	end
+end))
 
 local function onCharacterAdded(character)
-    watchContainer(character)
-
-    task.delay(1, function()
-        local tool = character:FindFirstChild(TARGET_TOOL_NAME) or character:FindFirstChild(NEW_TOOL_NAME)
-        if tool then
-            processTool(tool)
-        end
-    end)
+	watchContainer(character)
 end
 
-player.CharacterAdded:Connect(onCharacterAdded)
+track(player.CharacterAdded:Connect(onCharacterAdded))
 
 if player.Character then
-    onCharacterAdded(player.Character)
+	onCharacterAdded(player.Character)
+end
+
+-- Cleanup used if the script is executed again
+env.__EightBitCleanup = function()
+	for _, connection in ipairs(connections) do
+		pcall(function() connection:Disconnect() end)
+	end
+	table.clear(connections)
+
+	if successGunTracers and type(GunTracers) == "table" then
+		for funcName, originalFunc in pairs(tracerOriginals) do
+			pcall(function() GunTracers[funcName] = originalFunc end)
+		end
+	end
 end
