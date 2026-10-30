@@ -1018,11 +1018,4 @@ function ImGuiLib:AddTab(tabName)
 	return tabProxy
 end
 
-local ImGuiLib = {}
-
-function ImGuiLib.new(title)
-	-- Your window creation code goes here.
-end
-
--- Keep your existing library methods above this line.
 return ImGuiLib
