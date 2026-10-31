@@ -88,10 +88,33 @@ local function isInside(guiObject, point)
 		and point.Y >= position.Y and point.Y <= position.Y + size.Y
 end
 
--- Use the input's own Position (same coordinate space the GUI hit-testing uses here).
--- GetMouseLocation() is shifted by the top-bar inset and made popups/pickers read the wrong Y.
+local GuiService = game:GetService("GuiService")
+local DEBUG = false
+
+-- Mouse coordinates and GUI coordinates can differ vertically (top-bar inset) depending on the
+-- executor / Roblox version. Instead of guessing, learn the shift from a press on a small element:
+-- whichever candidate shift puts the click inside that element is the right one.
+-- Only used for color-picker drag math. Popups use hover state, not coordinates.
+local yShift = 0
+
+local function calibrate(input, guiObject)
+	local py = input.Position.Y
+	local top = guiObject.AbsolutePosition.Y
+	local bottom = top + guiObject.AbsoluteSize.Y
+	local inset = GuiService:GetGuiInset().Y
+	local diff = UserInputService:GetMouseLocation().Y - py
+	for _, shift in ipairs({0, diff, -diff, inset, -inset}) do
+		local y = py + shift
+		if y >= top and y <= bottom then
+			yShift = shift
+			if DEBUG then print("[ImGuiLib] y shift =", shift) end
+			return
+		end
+	end
+end
+
 local function inputPoint(input)
-	return Vector2.new(input.Position.X, input.Position.Y)
+	return Vector2.new(input.Position.X, input.Position.Y + yShift)
 end
 
 local function drawLine(parent, a, b, thickness, color)
@@ -129,6 +152,11 @@ end
 local ImGuiLib = {}
 ImGuiLib.__index = ImGuiLib
 ImGuiLib.Style = Style
+
+-- ImGuiLib.SetDebug(true) prints the detected mouse shift when you click a swatch.
+function ImGuiLib.SetDebug(value)
+	DEBUG = value and true or false
+end
 
 function ImGuiLib.new(windowTitle)
 	local self = setmetatable({}, ImGuiLib)
@@ -493,6 +521,7 @@ function ImGuiLib:AddTab(tabName)
 			Size = UDim2.fromOffset(100, #options * itemH + popupPad * 2),
 			BorderSizePixel = 0,
 			Visible = false,
+			Active = true,
 			ZIndex = 100,
 		}, window.MainFrame)
 		paint(Popup, Style.PopupBg)
@@ -505,6 +534,10 @@ function ImGuiLib:AddTab(tabName)
 		}, Popup)
 
 		local items = {}
+		local popupHovered = false
+		Popup.MouseEnter:Connect(function() popupHovered = true end)
+		Popup.MouseLeave:Connect(function() popupHovered = false end)
+
 		local function itemText(option)
 			return tostring(option)
 		end
@@ -541,6 +574,11 @@ function ImGuiLib:AddTab(tabName)
 				refreshItems()
 			end
 			Popup.Visible = open
+			if not open then
+				-- hover flags can get stuck when the popup hides under the cursor
+				popupHovered = false
+				for _, item in ipairs(items) do item.Hovered = false end
+			end
 			refreshCombo()
 		end
 
@@ -591,8 +629,12 @@ function ImGuiLib:AddTab(tabName)
 
 		window._connect(UserInputService.InputBegan, function(input)
 			if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
-				local point = inputPoint(input)
-				if not isInside(Popup, point) and not isInside(Combo, point) then
+				-- hover-based hit test: no coordinate math, so it works in any executor
+				local overItem = false
+				for _, item in ipairs(items) do
+					if item.Hovered then overItem = true break end
+				end
+				if not popupHovered and not comboHovered and not overItem then
 					setOpen(false)
 				end
 			end
@@ -938,6 +980,7 @@ function ImGuiLib:AddTab(tabName)
 			Size = UDim2.fromOffset(POPUP_W, POPUP_H),
 			BorderSizePixel = 0,
 			Visible = false,
+			Active = true,
 			ZIndex = 100,
 		}, window.MainFrame)
 		paint(Popup, Style.PopupBg)
@@ -1043,6 +1086,20 @@ function ImGuiLib:AddTab(tabName)
 		}, Popup)
 		paint(Hex, Style.FrameBg)
 
+		-- Hover tracking for the "click outside to close" check (no coordinate math)
+		local hoverState = {}
+		for _, obj in ipairs({Popup, SVBox, HueBar, Hex, Swatch}) do
+			hoverState[obj] = false
+			obj.MouseEnter:Connect(function() hoverState[obj] = true end)
+			obj.MouseLeave:Connect(function() hoverState[obj] = false end)
+		end
+		local function isOverPicker()
+			for _, over in pairs(hoverState) do
+				if over then return true end
+			end
+			return false
+		end
+
 		local function refresh(fire)
 			color = Color3.fromHSV(h, s, v)
 			Swatch.BackgroundColor3 = color
@@ -1117,17 +1174,25 @@ function ImGuiLib:AddTab(tabName)
 				)
 			else
 				dragMode = nil
+				for obj in pairs(hoverState) do
+					if obj ~= Swatch then hoverState[obj] = false end
+				end
 			end
 			Popup.Visible = open
 			SwatchStroke.Transparency = open and 0 or Style.Border[2]
 		end
 
+		-- Pressing the swatch (a 20px-tall element) tells us how mouse Y maps to GUI Y
+		Swatch.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				calibrate(input, Swatch)
+			end
+		end)
 		Swatch.MouseButton1Click:Connect(function() setOpen(not open) end)
 
 		window._connect(UserInputService.InputBegan, function(input)
 			if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
-				local point = inputPoint(input)
-				if not isInside(Popup, point) and not isInside(Swatch, point) then
+				if not isOverPicker() then
 					setOpen(false)
 				end
 			end
@@ -1270,7 +1335,7 @@ function ImGuiLib:AddTab(tabName)
 					refreshButton()
 					if onChanged then pcall(onChanged, key) end
 				elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-					if not isInside(Button, inputPoint(input)) then
+					if not hovered then
 						listening = false
 						refreshButton()
 					end
