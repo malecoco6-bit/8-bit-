@@ -936,7 +936,8 @@ function ImGuiLib:AddTab(tabName)
 	end
 
 	-- AddColorPicker(name, [defaultColor3], callback) -> callback(Color3)
-	-- Saturation/Value square, hue bar and hex input. Returns Row, api (api:Get() / api:Set(Color3))
+	-- ImGui-style picker: SV square + hue bar (arrow markers), R/G/B and H/S/V fields (0-255), hex input.
+	-- Returns Row, api (api:Get() / api:Set(Color3))
 	function tabProxy:AddColorPicker(name, defaultColor, callback)
 		if type(defaultColor) == "function" then
 			callback = defaultColor
@@ -946,9 +947,13 @@ function ImGuiLib:AddTab(tabName)
 		local h, s, v = color:ToHSV()
 		local frameH = Style.FrameHeight
 
-		local PAD, SV_W, SV_H, BAR_W, GAP = 8, 144, 120, 16, 6
-		local POPUP_W = PAD * 2 + SV_W + GAP + BAR_W
-		local POPUP_H = PAD * 2 + SV_H + GAP + frameH
+		local PAD, SV_W, SV_H, BAR_W, GAP, ROW_GAP = 8, 150, 150, 18, 8, 4
+		local INNER_W = SV_W + GAP + BAR_W
+		local POPUP_W = PAD * 2 + INNER_W
+		local ROW1_Y = PAD + SV_H + GAP
+		local ROW2_Y = ROW1_Y + frameH + ROW_GAP
+		local ROW3_Y = ROW2_Y + frameH + ROW_GAP
+		local POPUP_H = ROW3_Y + frameH + PAD
 
 		local Row = create("Frame", {
 			Size = UDim2.new(1, 0, 0, frameH),
@@ -991,6 +996,24 @@ function ImGuiLib:AddTab(tabName)
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}, Popup)
 
+		-- Hover tracking for the "click outside to close" check (no coordinate math)
+		local hoverState = {}
+		local function trackHover(obj)
+			hoverState[obj] = false
+			obj.MouseEnter:Connect(function() hoverState[obj] = true end)
+			obj.MouseLeave:Connect(function() hoverState[obj] = false end)
+		end
+		local function isOverPicker()
+			for _, over in pairs(hoverState) do
+				if over then return true end
+			end
+			return false
+		end
+		trackHover(Popup)
+		trackHover(Swatch)
+
+		local refresh -- forward declaration
+
 		-- Saturation / Value square
 		local SVBox = create("TextButton", {
 			Position = UDim2.fromOffset(PAD, PAD),
@@ -1002,6 +1025,7 @@ function ImGuiLib:AddTab(tabName)
 			ClipsDescendants = true,
 			ZIndex = 101,
 		}, Popup)
+		trackHover(SVBox)
 
 		local WhiteLayer = create("Frame", {
 			Size = UDim2.fromScale(1, 1),
@@ -1024,7 +1048,7 @@ function ImGuiLib:AddTab(tabName)
 
 		local Cursor = create("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = UDim2.fromOffset(10, 10),
+			Size = UDim2.fromOffset(12, 12),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 104,
@@ -1036,7 +1060,7 @@ function ImGuiLib:AddTab(tabName)
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}, Cursor)
 
-		-- Hue bar
+		-- Hue bar with arrow markers on both sides (like Dear ImGui)
 		local HueBar = create("TextButton", {
 			Position = UDim2.fromOffset(PAD + SV_W + GAP, PAD),
 			Size = UDim2.fromOffset(BAR_W, SV_H),
@@ -1046,6 +1070,7 @@ function ImGuiLib:AddTab(tabName)
 			Text = "",
 			ZIndex = 101,
 		}, Popup)
+		trackHover(HueBar)
 		create("UIGradient", {
 			Rotation = 90,
 			Color = ColorSequence.new({
@@ -1059,53 +1084,153 @@ function ImGuiLib:AddTab(tabName)
 			}),
 		}, HueBar)
 
-		local HueMarker = create("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = UDim2.new(1, 4, 0, 3),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			BorderSizePixel = 0,
+		local ArrowL = label(HueBar, {
+			AnchorPoint = Vector2.new(1, 0.5),
+			Size = UDim2.fromOffset(8, 12),
+			TextSize = 9,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Text = "▶",
 			ZIndex = 102,
-		}, HueBar)
-		create("UIStroke", {
-			Color = Color3.new(0, 0, 0),
-			Thickness = 1,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		}, HueMarker)
+		})
+		local ArrowR = label(HueBar, {
+			AnchorPoint = Vector2.new(0, 0.5),
+			Size = UDim2.fromOffset(8, 12),
+			TextSize = 9,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Text = "◀",
+			ZIndex = 102,
+		})
+
+		-- R/G/B/H/S/V numeric fields (0-255, same as Dear ImGui)
+		local function makeField(letter, x, y, w, commit)
+			local Field = create("Frame", {
+				Position = UDim2.fromOffset(x, y),
+				Size = UDim2.fromOffset(w, frameH),
+				BorderSizePixel = 0,
+				ZIndex = 101,
+			}, Popup)
+			paint(Field, Style.FrameBg)
+
+			label(Field, {
+				Position = UDim2.fromOffset(Style.FramePaddingX + 2, 0),
+				Size = UDim2.fromOffset(16, frameH),
+				Text = letter .. ":",
+				ZIndex = 102,
+			})
+
+			local Box = create("TextBox", {
+				Position = UDim2.fromOffset(Style.FramePaddingX + 18, 0),
+				Size = UDim2.new(1, -(Style.FramePaddingX * 2 + 18), 1, 0),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Font = Style.Font,
+				TextSize = Style.FontSize,
+				TextColor3 = Style.Text,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				ClearTextOnFocus = false,
+				Text = "0",
+				ZIndex = 102,
+			}, Field)
+
+			trackHover(Field)
+			trackHover(Box)
+
+			local hovered, focused = false, false
+			local function repaint()
+				paint(Field, focused and Style.FrameBgActive or (hovered and Style.FrameBgHovered or Style.FrameBg))
+			end
+			Field.MouseEnter:Connect(function() hovered = true repaint() end)
+			Field.MouseLeave:Connect(function() hovered = false repaint() end)
+			Box.Focused:Connect(function() focused = true repaint() end)
+			Box.FocusLost:Connect(function()
+				focused = false
+				repaint()
+				local n = tonumber(Box.Text)
+				if n then
+					commit(math.clamp(math.floor(n + 0.5), 0, 255))
+				else
+					refresh(false)
+				end
+			end)
+			return Box
+		end
+
+		local function currentRGB()
+			return math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5)
+		end
+
+		-- keep the old hue when the new color is grey/black (hue is undefined there)
+		local function setFromColor(c)
+			local nh, ns, nv = c:ToHSV()
+			if ns > 0 and nv > 0 then h = nh end
+			s, v = ns, nv
+			refresh(true)
+		end
+
+		local fieldW = math.floor((INNER_W - ROW_GAP * 2) / 3)
+		local lastW = INNER_W - (fieldW + ROW_GAP) * 2
+		local function fx(i) return PAD + (i - 1) * (fieldW + ROW_GAP) end
+
+		local RBox = makeField("R", fx(1), ROW1_Y, fieldW, function(n)
+			local _, g, b = currentRGB()
+			setFromColor(Color3.fromRGB(n, g, b))
+		end)
+		local GBox = makeField("G", fx(2), ROW1_Y, fieldW, function(n)
+			local r, _, b = currentRGB()
+			setFromColor(Color3.fromRGB(r, n, b))
+		end)
+		local BBox = makeField("B", fx(3), ROW1_Y, lastW, function(n)
+			local r, g = currentRGB()
+			setFromColor(Color3.fromRGB(r, g, n))
+		end)
+		local HBox = makeField("H", fx(1), ROW2_Y, fieldW, function(n)
+			h = n / 255
+			refresh(true)
+		end)
+		local SBox = makeField("S", fx(2), ROW2_Y, fieldW, function(n)
+			s = n / 255
+			refresh(true)
+		end)
+		local VBox = makeField("V", fx(3), ROW2_Y, lastW, function(n)
+			v = n / 255
+			refresh(true)
+		end)
 
 		-- Hex input
 		local Hex = create("TextBox", {
-			Position = UDim2.fromOffset(PAD, PAD + SV_H + GAP),
-			Size = UDim2.fromOffset(POPUP_W - PAD * 2, frameH),
+			Position = UDim2.fromOffset(PAD, ROW3_Y),
+			Size = UDim2.fromOffset(INNER_W, frameH),
 			BorderSizePixel = 0,
 			Font = Style.Font,
 			TextSize = Style.FontSize,
 			TextColor3 = Style.Text,
+			TextXAlignment = Enum.TextXAlignment.Left,
 			ClearTextOnFocus = false,
 			Text = toHex(color),
 			ZIndex = 101,
 		}, Popup)
 		paint(Hex, Style.FrameBg)
+		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX + 2)}, Hex)
+		trackHover(Hex)
 
-		-- Hover tracking for the "click outside to close" check (no coordinate math)
-		local hoverState = {}
-		for _, obj in ipairs({Popup, SVBox, HueBar, Hex, Swatch}) do
-			hoverState[obj] = false
-			obj.MouseEnter:Connect(function() hoverState[obj] = true end)
-			obj.MouseLeave:Connect(function() hoverState[obj] = false end)
-		end
-		local function isOverPicker()
-			for _, over in pairs(hoverState) do
-				if over then return true end
-			end
-			return false
-		end
-
-		local function refresh(fire)
+		refresh = function(fire)
 			color = Color3.fromHSV(h, s, v)
 			Swatch.BackgroundColor3 = color
 			SVBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
 			Cursor.Position = UDim2.fromScale(s, 1 - v)
-			HueMarker.Position = UDim2.new(0.5, 0, h, 0)
+			ArrowL.Position = UDim2.new(0, 1, h, 0)
+			ArrowR.Position = UDim2.new(1, -1, h, 0)
+
+			local r, g, b = currentRGB()
+			local values = {
+				{RBox, r}, {GBox, g}, {BBox, b},
+				{HBox, math.floor(h * 255 + 0.5)},
+				{SBox, math.floor(s * 255 + 0.5)},
+				{VBox, math.floor(v * 255 + 0.5)},
+			}
+			for _, pair in ipairs(values) do
+				if not pair[1]:IsFocused() then pair[1].Text = tostring(pair[2]) end
+			end
 			if not Hex:IsFocused() then
 				Hex.Text = toHex(color)
 			end
@@ -1118,8 +1243,7 @@ function ImGuiLib:AddTab(tabName)
 			paint(Hex, Style.FrameBg)
 			local parsed = fromHex(Hex.Text)
 			if parsed then
-				h, s, v = parsed:ToHSV()
-				refresh(true)
+				setFromColor(parsed)
 			end
 			Hex.Text = toHex(color)
 		end)
@@ -1168,10 +1292,13 @@ function ImGuiLib:AddTab(tabName)
 			open = state
 			if open then
 				local main = window.MainFrame
-				Popup.Position = UDim2.fromOffset(
-					Swatch.AbsolutePosition.X - main.AbsolutePosition.X,
-					Swatch.AbsolutePosition.Y + Swatch.AbsoluteSize.Y - main.AbsolutePosition.Y
-				)
+				local x = Swatch.AbsolutePosition.X - main.AbsolutePosition.X
+				local y = Swatch.AbsolutePosition.Y + Swatch.AbsoluteSize.Y - main.AbsolutePosition.Y
+				-- flip above the swatch if it would run off the bottom of the window
+				if y + POPUP_H > main.AbsoluteSize.Y then
+					y = math.max(0, Swatch.AbsolutePosition.Y - main.AbsolutePosition.Y - POPUP_H)
+				end
+				Popup.Position = UDim2.fromOffset(x, y)
 			else
 				dragMode = nil
 				for obj in pairs(hoverState) do
