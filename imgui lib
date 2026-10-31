@@ -897,7 +897,45 @@ local function buildProxy(window, Content)
 		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
 	end
 
+	-- Right-click a slider to type an exact value (Enter or click away to apply).
+	-- Returns the edit box so the slider's drag handler can ignore clicks while it is open.
+	local function attachRightClickEdit(Track, getValue, applyValue)
+		local Edit = themeText(create("TextBox", {
+			Size = UDim2.fromScale(1, 1),
+			BorderSizePixel = 0,
+			Font = Style.Font,
+			TextSize = Style.FontSize,
+			TextColor3 = Style.Text,
+			Text = "",
+			TextXAlignment = Enum.TextXAlignment.Center,
+			ClearTextOnFocus = false,
+			Visible = false,
+			ZIndex = 10,
+		}, Track))
+		paint(Edit, Style.FrameBgActive)
+
+		Track.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				Edit.Text = fmt(getValue())
+				Edit.Visible = true
+				task.defer(function()
+					Edit:CaptureFocus()
+					Edit.SelectionStart = 1
+					Edit.CursorPosition = #Edit.Text + 1
+				end)
+			end
+		end)
+
+		Edit.FocusLost:Connect(function()
+			Edit.Visible = false
+			local n = tonumber(Edit.Text)
+			if n then applyValue(n) end
+		end)
+		return Edit
+	end
+
 	-- ===== Sliders / numbers =====
+	-- Left-drag to change the value, right-click to type an exact one.
 	function proxy:AddSlider(name, min, max, defaultVal, step, callback)
 		-- Allow calling without a step: AddSlider(name, min, max, default, callback)
 		if type(step) == "function" then
@@ -948,7 +986,7 @@ local function buildProxy(window, Content)
 			local alpha = (value - min) / range
 			Grab.Size = UDim2.fromOffset(grabWidth, frameH - 4)
 			Grab.Position = UDim2.fromOffset(2 + (usable - grabWidth) * alpha, 2)
-			ValueText.Text = tostring(value)
+			ValueText.Text = fmt(value)
 		end
 		Track:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
 		refresh()
@@ -974,11 +1012,21 @@ local function buildProxy(window, Content)
 			end
 		end
 
+		-- Right-click: type an exact value (clamped to min/max, not snapped to step)
+		local Edit = attachRightClickEdit(Track, function() return value end, function(n)
+			n = math.clamp(n, min, max)
+			if n ~= value then
+				value = n
+				refresh()
+				sig:Fire(value)
+			end
+		end)
+
 		Track.MouseEnter:Connect(function() hovered = true refreshColors() end)
 		Track.MouseLeave:Connect(function() hovered = false refreshColors() end)
 
 		Track.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if input.UserInputType == Enum.UserInputType.MouseButton1 and not Edit.Visible then
 				dragging = true
 				refreshColors()
 				setFromMouse(input.Position.X)
@@ -1009,7 +1057,8 @@ local function buildProxy(window, Content)
 
 	proxy.AddArrowSlider = proxy.AddSlider
 
-	-- AddDragSlider(name, min, max, default, [speed], callback): click and drag sideways to change the value
+	-- AddDragSlider(name, min, max, default, [speed], callback): click and drag sideways to change the value,
+	-- right-click to type an exact one
 	function proxy:AddDragSlider(name, min, max, defaultVal, speed, callback)
 		if type(speed) == "function" then
 			callback = speed
@@ -1050,10 +1099,15 @@ local function buildProxy(window, Content)
 			end
 		end
 
+		-- Right-click: type an exact value
+		local Edit = attachRightClickEdit(Track, function() return value end, function(n)
+			setValue(n) -- clamps and fires the callback
+		end)
+
 		Track.MouseEnter:Connect(function() hovered = true refreshColors() end)
 		Track.MouseLeave:Connect(function() hovered = false refreshColors() end)
 		Track.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if input.UserInputType == Enum.UserInputType.MouseButton1 and not Edit.Visible then
 				dragging = true
 				lastX = input.Position.X
 				refreshColors()
