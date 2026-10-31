@@ -35,6 +35,7 @@ local Style = {
 
 	Header = {Color3.fromRGB(66, 150, 250), 0.69},
 	HeaderHovered = {Color3.fromRGB(66, 150, 250), 0.2},
+	HeaderSelected = {Color3.fromRGB(66, 150, 250), 0.45},
 
 	Tab = {Color3.fromRGB(42, 77, 129), 0},
 	TabHovered = {Color3.fromRGB(56, 123, 203), 0},
@@ -87,10 +88,10 @@ local function isInside(guiObject, point)
 		and point.Y >= position.Y and point.Y <= position.Y + size.Y
 end
 
--- GetMouseLocation is NOT inset-adjusted, which matches AbsolutePosition
--- of a ScreenGui with IgnoreGuiInset = true (input.Position would be off in Y).
-local function mousePos()
-	return UserInputService:GetMouseLocation()
+-- Use the input's own Position (same coordinate space the GUI hit-testing uses here).
+-- GetMouseLocation() is shifted by the top-bar inset and made popups/pickers read the wrong Y.
+local function inputPoint(input)
+	return Vector2.new(input.Position.X, input.Position.Y)
 end
 
 local function drawLine(parent, a, b, thickness, color)
@@ -505,9 +506,6 @@ function ImGuiLib:AddTab(tabName)
 
 		local items = {}
 		local function itemText(option)
-			if multi then
-				return (set[option] and "[x] " or "[ ] ") .. tostring(option)
-			end
 			return tostring(option)
 		end
 
@@ -517,7 +515,7 @@ function ImGuiLib:AddTab(tabName)
 				if item.Hovered then
 					paint(item.Button, Style.HeaderHovered)
 				elseif isSelected(item.Option) then
-					paint(item.Button, Style.Header)
+					paint(item.Button, Style.HeaderSelected)
 				else
 					item.Button.BackgroundTransparency = 1
 				end
@@ -593,7 +591,7 @@ function ImGuiLib:AddTab(tabName)
 
 		window._connect(UserInputService.InputBegan, function(input)
 			if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
-				local point = mousePos()
+				local point = inputPoint(input)
 				if not isInside(Popup, point) and not isInside(Combo, point) then
 					setOpen(false)
 				end
@@ -1071,8 +1069,7 @@ function ImGuiLib:AddTab(tabName)
 
 		-- Dragging
 		local dragMode = nil
-		local function updateFromMouse()
-			local m = mousePos()
+		local function updateFromMouse(m)
 			if dragMode == "sv" then
 				s = math.clamp((m.X - SVBox.AbsolutePosition.X) / SVBox.AbsoluteSize.X, 0, 1)
 				v = 1 - math.clamp((m.Y - SVBox.AbsolutePosition.Y) / SVBox.AbsoluteSize.Y, 0, 1)
@@ -1087,19 +1084,19 @@ function ImGuiLib:AddTab(tabName)
 		SVBox.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
 				dragMode = "sv"
-				updateFromMouse()
+				updateFromMouse(inputPoint(input))
 			end
 		end)
 		HueBar.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
 				dragMode = "hue"
-				updateFromMouse()
+				updateFromMouse(inputPoint(input))
 			end
 		end)
 
 		window._connect(UserInputService.InputChanged, function(input)
 			if dragMode and input.UserInputType == Enum.UserInputType.MouseMovement then
-				updateFromMouse()
+				updateFromMouse(inputPoint(input))
 			end
 		end)
 		window._connect(UserInputService.InputEnded, function(input)
@@ -1129,7 +1126,7 @@ function ImGuiLib:AddTab(tabName)
 
 		window._connect(UserInputService.InputBegan, function(input)
 			if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
-				local point = mousePos()
+				local point = inputPoint(input)
 				if not isInside(Popup, point) and not isInside(Swatch, point) then
 					setOpen(false)
 				end
@@ -1273,7 +1270,7 @@ function ImGuiLib:AddTab(tabName)
 					refreshButton()
 					if onChanged then pcall(onChanged, key) end
 				elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-					if not isInside(Button, mousePos()) then
+					if not isInside(Button, inputPoint(input)) then
 						listening = false
 						refreshButton()
 					end
