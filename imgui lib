@@ -2739,6 +2739,1091 @@ local function buildProxy(window, Content)
 		return target
 	end
 
+	local function toAssetUrl(id)
+		if type(id) == "number" then return "rbxassetid://" .. id end
+		id = tostring(id or "")
+		if id:match("^%d+$") then return "rbxassetid://" .. id end
+		return id
+	end
+
+	local function toSize(size, default)
+		if typeof(size) == "Vector2" then return size end
+		if type(size) == "number" then return Vector2.new(size, size) end
+		if type(size) == "table" then
+			return Vector2.new(size[1] or default, size[2] or size[1] or default)
+		end
+		return Vector2.new(default, default)
+	end
+
+	-- ===== AddSelectable(name, [default], callback) -> callback(selected) =====
+	function proxy:AddSelectable(name, default, callback)
+		if type(default) == "function" then
+			callback = default
+			default = false
+		end
+		local sig = newSignal(callback)
+		local selected = default and true or false
+
+		local Row = themeText(create("TextButton", {
+			Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = tostring(name),
+			Font = Style.Font,
+			TextSize = Style.FontSize,
+			TextColor3 = Style.Text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}, Content))
+		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX + 4)}, Row)
+
+		local hovered = false
+		local function refresh()
+			if hovered then
+				paint(Row, Style.HeaderHovered)
+			elseif selected then
+				paint(Row, Style.HeaderSelected)
+			else
+				Row.BackgroundTransparency = 1
+			end
+		end
+		table.insert(Restylers, refresh)
+		refresh()
+
+		Row.MouseEnter:Connect(function() hovered = true refresh() end)
+		Row.MouseLeave:Connect(function() hovered = false refresh() end)
+		Row.MouseButton1Click:Connect(function()
+			selected = not selected
+			refresh()
+			sig:Fire(selected)
+		end)
+
+		local api = {Type = "bool", Changed = sig}
+		function api:Get() return selected end
+		function api:Set(value)
+			selected = value and true or false
+			refresh()
+		end
+		return Row, decorate(window, Row, api, {nameLabel = Row})
+	end
+
+	-- ===== AddInputMultiline(name, [default], [height], callback) -> callback(text) (fires on focus lost) =====
+	function proxy:AddInputMultiline(name, defaultText, height, callback)
+		if type(defaultText) == "function" then
+			callback = defaultText
+			defaultText, height = nil, nil
+		elseif type(height) == "function" then
+			callback = height
+			height = nil
+		end
+		height = type(height) == "number" and height or 80
+		local sig = newSignal(callback)
+
+		local Row = newRow(height)
+		local Box = themeText(create("TextBox", {
+			Size = UDim2.new(SPLIT, 0, 1, 0),
+			BorderSizePixel = 0,
+			Font = Style.Font,
+			TextSize = Style.FontSize,
+			TextColor3 = Style.Text,
+			Text = defaultText and tostring(defaultText) or "",
+			MultiLine = true,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			ClearTextOnFocus = false,
+			ClipsDescendants = true,
+		}, Row))
+		paint(Box, Style.FrameBg)
+		create("UIPadding", {
+			PaddingLeft = UDim.new(0, Style.FramePaddingX),
+			PaddingRight = UDim.new(0, Style.FramePaddingX),
+			PaddingTop = UDim.new(0, 2),
+		}, Box)
+
+		local NameLabel = label(Row, {
+			Position = UDim2.new(SPLIT, Style.ItemInnerSpacing, 0, 0),
+			Size = UDim2.new(1 - SPLIT, -Style.ItemInnerSpacing, 0, Style.FrameHeight),
+			Text = name,
+		})
+
+		local hovered, focused = false, false
+		local function refreshBox()
+			paint(Box, focused and Style.FrameBgActive or (hovered and Style.FrameBgHovered or Style.FrameBg))
+		end
+		table.insert(Restylers, refreshBox)
+		Box.MouseEnter:Connect(function() hovered = true refreshBox() end)
+		Box.MouseLeave:Connect(function() hovered = false refreshBox() end)
+		Box.Focused:Connect(function() focused = true refreshBox() end)
+		Box.FocusLost:Connect(function()
+			focused = false
+			refreshBox()
+			sig:Fire(Box.Text)
+		end)
+
+		local api = {Type = "string", Changed = sig}
+		function api:Get() return Box.Text end
+		function api:Set(text) Box.Text = tostring(text) end
+		api.Refire = function() sig:Fire(Box.Text) end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddPasswordInput(name, [default], callback) -> callback(text, enterPressed) =====
+	-- The box only ever shows "*"; api:Get() returns the real text.
+	function proxy:AddPasswordInput(name, defaultText, callback)
+		if type(defaultText) == "function" then
+			callback = defaultText
+			defaultText = nil
+		end
+		local sig = newSignal(callback)
+		local real = defaultText and tostring(defaultText) or ""
+		local internal = false
+
+		local Row = newRow()
+		local Box = themeText(create("TextBox", {
+			Size = UDim2.new(SPLIT, 0, 1, 0),
+			BorderSizePixel = 0,
+			Font = Style.Font,
+			TextSize = Style.FontSize,
+			TextColor3 = Style.Text,
+			Text = "",
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ClearTextOnFocus = false,
+			ClipsDescendants = true,
+		}, Row))
+		paint(Box, Style.FrameBg)
+		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, Box)
+		local NameLabel = nameLabel(Row, name)
+
+		local function mask(cursor)
+			internal = true
+			Box.Text = string.rep("*", #real)
+			if cursor then Box.CursorPosition = cursor end
+			internal = false
+		end
+		mask()
+
+		-- Reconstruct the real text from what was typed, using the length change + cursor position
+		Box:GetPropertyChangedSignal("Text"):Connect(function()
+			if internal then return end
+			local text = Box.Text
+			local old = #real
+			local pos = Box.CursorPosition - 1 -- characters before the cursor
+			if pos < 0 then pos = #text end
+			if #text > old then
+				local n = #text - old
+				local start = math.max(pos - n, 0)
+				local inserted = text:sub(start + 1, start + n)
+				real = real:sub(1, start) .. inserted .. real:sub(start + 1)
+				pos = start + n
+			elseif #text < old then
+				local n = old - #text
+				real = real:sub(1, pos) .. real:sub(pos + n + 1)
+			end
+			mask(pos + 1)
+		end)
+
+		local hovered, focused = false, false
+		local function refreshBox()
+			paint(Box, focused and Style.FrameBgActive or (hovered and Style.FrameBgHovered or Style.FrameBg))
+		end
+		table.insert(Restylers, refreshBox)
+		Box.MouseEnter:Connect(function() hovered = true refreshBox() end)
+		Box.MouseLeave:Connect(function() hovered = false refreshBox() end)
+		Box.Focused:Connect(function() focused = true refreshBox() end)
+		Box.FocusLost:Connect(function(enterPressed)
+			focused = false
+			refreshBox()
+			sig:Fire(real, enterPressed)
+		end)
+
+		local api = {Type = "string", Changed = sig}
+		function api:Get() return real end
+		function api:Set(text)
+			real = tostring(text or "")
+			mask()
+		end
+		api.Save = function() return nil end -- never write passwords into config files
+		api.Refire = function() sig:Fire(real, false) end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== Vector inputs =====
+	-- speed == nil  -> typed boxes (fire on focus lost)
+	-- speed == n    -> drag fields (drag sideways, right-click to type)
+	local function buildVector(name, n, default, callback, speed)
+		local sig = newSignal(callback)
+		local gap = Style.ItemInnerSpacing
+		local vals = {}
+		for i = 1, n do vals[i] = tonumber(default and default[i]) or 0 end
+
+		local Row = newRow()
+		local Field = create("Frame", {
+			Size = UDim2.new(SPLIT, 0, 1, 0),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+		}, Row)
+		local NameLabel = nameLabel(Row, name)
+
+		local cells = {}
+		local function snapshot()
+			local copy = {}
+			for i = 1, n do copy[i] = vals[i] end
+			return copy
+		end
+		local function setComp(i, value)
+			value = math.floor(value * 10000 + 0.5) / 10000
+			if value ~= vals[i] then
+				vals[i] = value
+				cells[i].Text = fmt(value)
+				sig:Fire(snapshot())
+			end
+		end
+
+		for i = 1, n do
+			local Cell
+			local hovered, active = false, false
+			local function repaint()
+				paint(Cell, active and Style.FrameBgActive or (hovered and Style.FrameBgHovered or Style.FrameBg))
+			end
+
+			local props = {
+				Size = UDim2.new(1 / n, -gap * (n - 1) / n, 1, 0),
+				Position = UDim2.new((i - 1) / n, (i - 1) * gap / n, 0, 0),
+				BorderSizePixel = 0,
+				Font = Style.Font,
+				TextSize = Style.FontSize,
+				TextColor3 = Style.Text,
+				Text = fmt(vals[i]),
+			}
+
+			if speed then
+				props.AutoButtonColor = false
+				Cell = themeText(create("TextButton", props, Field))
+				paint(Cell, Style.FrameBg)
+
+				local Edit = attachRightClickEdit(Cell, function() return vals[i] end, function(num)
+					setComp(i, num)
+				end)
+				local lastX = 0
+				Cell.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 and not Edit.Visible then
+						active = true
+						lastX = input.Position.X
+						repaint()
+					end
+				end)
+				window._connect(UserInputService.InputChanged, function(input)
+					if active and input.UserInputType == Enum.UserInputType.MouseMovement then
+						local dx = input.Position.X - lastX
+						lastX = input.Position.X
+						setComp(i, vals[i] + dx * speed)
+					end
+				end)
+				window._connect(UserInputService.InputEnded, function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 and active then
+						active = false
+						repaint()
+					end
+				end)
+			else
+				props.ClearTextOnFocus = false
+				props.TextXAlignment = Enum.TextXAlignment.Left
+				props.ClipsDescendants = true
+				Cell = themeText(create("TextBox", props, Field))
+				paint(Cell, Style.FrameBg)
+				create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, Cell)
+
+				Cell.Focused:Connect(function() active = true repaint() end)
+				Cell.FocusLost:Connect(function()
+					active = false
+					repaint()
+					local num = tonumber(Cell.Text)
+					if num then setComp(i, num) end
+					Cell.Text = fmt(vals[i])
+				end)
+			end
+
+			Cell.MouseEnter:Connect(function() hovered = true repaint() end)
+			Cell.MouseLeave:Connect(function() hovered = false repaint() end)
+			table.insert(Restylers, repaint)
+			cells[i] = Cell
+		end
+
+		local api = {Type = "table", Changed = sig}
+		function api:Get() return snapshot() end
+		function api:Set(list)
+			if type(list) ~= "table" then return end
+			for i = 1, n do
+				vals[i] = tonumber(list[i]) or vals[i]
+				cells[i].Text = fmt(vals[i])
+			end
+		end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- AddInputVector2(name, {x, y}, callback) -> callback({x, y})
+	function proxy:AddInputVector2(name, default, callback)
+		if type(default) == "function" then callback = default default = nil end
+		return buildVector(name, 2, default, callback, nil)
+	end
+
+	-- AddInputVector3(name, {x, y, z}, callback) -> callback({x, y, z})
+	function proxy:AddInputVector3(name, default, callback)
+		if type(default) == "function" then callback = default default = nil end
+		return buildVector(name, 3, default, callback, nil)
+	end
+
+	-- AddDragVector3(name, {x, y, z}, [speed], callback) -> callback({x, y, z})
+	function proxy:AddDragVector3(name, default, speed, callback)
+		if type(default) == "function" then
+			callback = default
+			default, speed = nil, nil
+		elseif type(speed) == "function" then
+			callback = speed
+			speed = nil
+		end
+		if type(speed) ~= "number" or speed <= 0 then speed = 0.05 end
+		return buildVector(name, 3, default, callback, speed)
+	end
+
+	-- ===== AddColorButton(name, color, callback) -> callback(color) on click =====
+	function proxy:AddColorButton(name, color, callback)
+		if type(color) == "function" then
+			callback = color
+			color = nil
+		end
+		local sig = newSignal(callback)
+		color = typeof(color) == "Color3" and color or Color3.fromRGB(66, 150, 250)
+		local size = Style.FrameHeight
+
+		local Row = create("TextButton", {
+			Size = UDim2.new(1, 0, 0, size),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = "",
+		}, Content)
+		local Swatch = create("Frame", {
+			Size = UDim2.fromOffset(size, size),
+			BackgroundColor3 = color,
+			BorderSizePixel = 0,
+		}, Row)
+		local stroke = border(Swatch)
+		local NameLabel = label(Row, {
+			Position = UDim2.fromOffset(size + Style.ItemInnerSpacing, 0),
+			Size = UDim2.new(1, -(size + Style.ItemInnerSpacing), 1, 0),
+			Text = name,
+		})
+
+		Row.MouseEnter:Connect(function() stroke.Transparency = 0 end)
+		Row.MouseLeave:Connect(function() stroke.Transparency = Style.Border[2] end)
+		Row.MouseButton1Click:Connect(function() sig:Fire(color) end)
+
+		local api = {Type = "color", Changed = sig}
+		function api:Get() return color end
+		function api:Set(newColor)
+			if typeof(newColor) ~= "Color3" then return end
+			color = newColor
+			Swatch.BackgroundColor3 = color
+		end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddConsole(name, [height]) -> api:Log(text, [color]) / api:Clear() =====
+	function proxy:AddConsole(name, height)
+		height = type(height) == "number" and height or 120
+		local MAX_LINES = 300
+
+		local Holder = newBox(Content)
+		local NameLabel
+		if name and name ~= "" then
+			NameLabel = label(Holder, {
+				Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+				Text = name,
+				LayoutOrder = 0,
+			})
+		end
+
+		local Box = create("ScrollingFrame", {
+			Size = UDim2.new(1, 0, 0, height),
+			BorderSizePixel = 0,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollBarThickness = 6,
+			ScrollBarImageColor3 = Style.ScrollbarGrab,
+			LayoutOrder = 1,
+		}, Holder)
+		paint(Box, Style.PopupBg)
+		border(Box)
+		create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, Box)
+		create("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+			PaddingTop = UDim.new(0, 2),
+			PaddingBottom = UDim.new(0, 2),
+		}, Box)
+
+		local lines, counter = {}, 0
+		local api = {Type = "console", AutoScroll = true}
+
+		function api:Log(text, color)
+			counter += 1
+			local Line = label(Box, {
+				Size = UDim2.new(1, 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				TextWrapped = true,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				Text = tostring(text),
+				LayoutOrder = counter,
+			})
+			if color then
+				ThemedText[Line] = nil
+				Line.TextColor3 = color
+			end
+			table.insert(lines, Line)
+			while #lines > MAX_LINES do
+				table.remove(lines, 1):Destroy()
+			end
+			if self.AutoScroll then
+				task.delay(0.05, function()
+					if Box.Parent then
+						Box.CanvasPosition = Vector2.new(0, math.max(Box.AbsoluteCanvasSize.Y - Box.AbsoluteWindowSize.Y, 0))
+					end
+				end)
+			end
+		end
+		function api:Clear()
+			for _, Line in ipairs(lines) do Line:Destroy() end
+			lines = {}
+		end
+		function api:Get()
+			local out = {}
+			for _, Line in ipairs(lines) do table.insert(out, Line.Text) end
+			return out
+		end
+		api.Save = function() return nil end
+		return Holder, decorate(window, Holder, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddHistogram(name, values, [height], [{Min = n, Max = n}]) api:Set(list) / api:Push(value) =====
+	function proxy:AddHistogram(name, values, height, options)
+		height = type(height) == "number" and height or 40
+		options = type(options) == "table" and options or {}
+		local MAX_POINTS = 200
+		local data = {}
+		for index, value in ipairs(values or {}) do data[index] = value end
+
+		local Row = newRow(height)
+		local Plot = create("Frame", {
+			Size = UDim2.new(SPLIT, 0, 1, 0),
+			BorderSizePixel = 0,
+			ClipsDescendants = true,
+		}, Row)
+		paint(Plot, Style.FrameBg)
+		local NameLabel = label(Row, {
+			Position = UDim2.new(SPLIT, Style.ItemInnerSpacing, 0, 0),
+			Size = UDim2.new(1 - SPLIT, -Style.ItemInnerSpacing, 0, Style.FrameHeight),
+			Text = name,
+		})
+
+		local bars = {}
+		local function redraw()
+			local count = #data
+			local size = Plot.AbsoluteSize
+			local lo, hi = options.Min, options.Max
+			if not lo or not hi then
+				local dataLo, dataHi = math.huge, -math.huge
+				for _, value in ipairs(data) do
+					dataLo = math.min(dataLo, value)
+					dataHi = math.max(dataHi, value)
+				end
+				lo = lo or (dataLo == math.huge and 0 or math.min(0, dataLo))
+				hi = hi or (dataHi == -math.huge and 1 or dataHi)
+			end
+			if hi == lo then hi = lo + 1 end
+
+			local used = 0
+			if count >= 1 and size.X > 0 and size.Y > 0 then
+				local pad = 4
+				local barW = (size.X - pad * 2) / count
+				local plotH = size.Y - pad * 2
+				for index = 1, count do
+					used += 1
+					local bar = bars[used]
+					if not bar then
+						bar = create("Frame", {BorderSizePixel = 0}, Plot)
+						bars[used] = bar
+					end
+					local h = math.max((math.clamp(data[index], lo, hi) - lo) / (hi - lo) * plotH, 1)
+					bar.BackgroundColor3 = Style.PlotHistogram
+					bar.Position = UDim2.fromOffset(pad + (index - 1) * barW, size.Y - pad - h)
+					bar.Size = UDim2.fromOffset(math.max(barW - 1, 1), h)
+					bar.Visible = true
+				end
+			end
+			for index = used + 1, #bars do bars[index].Visible = false end
+		end
+		Plot:GetPropertyChangedSignal("AbsoluteSize"):Connect(redraw)
+		table.insert(Restylers, redraw)
+		redraw()
+
+		local api = {Type = "list"}
+		function api:Get() return data end
+		function api:Set(list)
+			data = {}
+			for index, value in ipairs(list or {}) do data[index] = value end
+			redraw()
+		end
+		function api:Push(value)
+			table.insert(data, value)
+			while #data > MAX_POINTS do table.remove(data, 1) end
+			redraw()
+		end
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddImage(assetId, [size]) -- size = number | Vector2 | {w, h} =====
+	function proxy:AddImage(assetId, size)
+		local s = toSize(size, 64)
+		local Row = create("ImageLabel", {
+			Size = UDim2.fromOffset(s.X, s.Y),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Image = toAssetUrl(assetId),
+		}, Content)
+
+		local api = {Type = "image"}
+		function api:Get() return Row.Image end
+		function api:Set(newId) Row.Image = toAssetUrl(newId) end
+		function api:SetSize(newSize)
+			local v = toSize(newSize, 64)
+			Row.Size = UDim2.fromOffset(v.X, v.Y)
+		end
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {})
+	end
+
+	-- ===== AddImageButton(assetId, [size], callback) =====
+	function proxy:AddImageButton(assetId, size, callback)
+		if type(size) == "function" then
+			callback = size
+			size = nil
+		end
+		local sig = newSignal(callback)
+		local s = toSize(size, 32)
+
+		local Row = create("TextButton", {
+			Size = UDim2.fromOffset(s.X + 4, s.Y + 4),
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = "",
+		}, Content)
+		paint(Row, Style.Button)
+		local Img = create("ImageLabel", {
+			Position = UDim2.fromOffset(2, 2),
+			Size = UDim2.fromOffset(s.X, s.Y),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Image = toAssetUrl(assetId),
+		}, Row)
+
+		Row.MouseEnter:Connect(function() paint(Row, Style.ButtonHovered) end)
+		Row.MouseLeave:Connect(function() paint(Row, Style.Button) end)
+		Row.MouseButton1Click:Connect(function() sig:Fire() end)
+
+		local api = {Type = "button", Changed = sig}
+		function api:Click() sig:Fire() end
+		function api:SetImage(newId) Img.Image = toAssetUrl(newId) end
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {})
+	end
+
+	-- ===== AddSpinner(name) -- loading indicator; api:SetActive(bool) =====
+	function proxy:AddSpinner(name)
+		local size = Style.FrameHeight
+		local Row = newRow()
+		local Spin = create("Frame", {
+			Size = UDim2.fromOffset(size, size),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+		}, Row)
+
+		local N, RADIUS, DOT = 8, size / 2 - 3, 3
+		local dots = {}
+		for i = 1, N do
+			local angle = (i - 1) / N * math.pi * 2 - math.pi / 2
+			dots[i] = create("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromOffset(size / 2 + math.cos(angle) * RADIUS, size / 2 + math.sin(angle) * RADIUS),
+				Size = UDim2.fromOffset(DOT, DOT),
+				BackgroundColor3 = Style.CheckMark,
+				BorderSizePixel = 0,
+			}, Spin)
+			create("UICorner", {CornerRadius = UDim.new(1, 0)}, dots[i])
+		end
+
+		local NameLabel = label(Row, {
+			Position = UDim2.fromOffset(size + Style.ItemInnerSpacing, 0),
+			Size = UDim2.new(1, -(size + Style.ItemInnerSpacing), 1, 0),
+			Text = name or "",
+		})
+
+		local active, head, acc = true, 0, 0
+		local function repaintDots()
+			for i = 1, N do
+				local age = (head - (i - 1)) % N
+				dots[i].BackgroundColor3 = Style.CheckMark
+				dots[i].BackgroundTransparency = age / N * 0.9
+			end
+		end
+		table.insert(Restylers, repaintDots)
+		repaintDots()
+
+		window._connect(RunService.Heartbeat, function(dt)
+			if not active or not Row.Parent or not window.ScreenGui.Enabled then return end
+			acc += dt
+			if acc < 0.08 then return end
+			acc = 0
+			head = (head + 1) % N
+			repaintDots()
+		end)
+
+		local api = {Type = "spinner"}
+		function api:SetActive(state)
+			active = state and true or false
+			Spin.Visible = active
+		end
+		function api:Get() return active end
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddChild(name, [height]) -- scrollable bordered region; use the returned section like a tab =====
+	function proxy:AddChild(name, height)
+		height = type(height) == "number" and height or 120
+		local Child = create("ScrollingFrame", {
+			Name = tostring(name or "Child"),
+			Size = UDim2.new(1, 0, 0, height),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollBarThickness = 6,
+			ScrollBarImageColor3 = Style.ScrollbarGrab,
+			VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
+		}, Content)
+		border(Child)
+		create("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, Style.ItemSpacing),
+		}, Child)
+		create("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+			PaddingTop = UDim.new(0, 4),
+			PaddingBottom = UDim.new(0, 4),
+		}, Child)
+
+		-- dropdown popups don't follow scrolling content
+		Child:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+			for _, closePopup in ipairs(window.ClosePopups) do closePopup() end
+		end)
+
+		local section = buildProxy(window, Child)
+		section.Name = name
+		section.Holder = Child
+		section.Instance = Child
+		function section:SetVisible(state) Child.Visible = state and true or false return self end
+		function section:SetHeight(value) Child.Size = UDim2.new(1, 0, 0, value) return self end
+		return section
+	end
+
+	-- ===== AddTabBar() -> bar; bar:AddTab(name) returns a section (nested tabs) =====
+	function proxy:AddTabBar()
+		local Holder = newBox(Content)
+		local Bar = create("Frame", {
+			Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			LayoutOrder = 1,
+		}, Holder)
+		create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 2),
+		}, Bar)
+		local Line = create("Frame", {
+			Size = UDim2.new(1, 0, 0, 1),
+			BorderSizePixel = 0,
+			LayoutOrder = 2,
+		}, Holder)
+		paint(Line, Style.TabActive)
+		local Pages = newBox(Holder, 3)
+		create("UIPadding", {PaddingTop = UDim.new(0, Style.ItemSpacing)}, Pages)
+
+		local tabs = {}
+		local bar = {Holder = Holder, Instance = Holder, Tabs = tabs}
+
+		local function selectTab(target)
+			for _, other in ipairs(tabs) do
+				other.Active = other == target
+				other.Page.Visible = other.Active
+				other.Refresh()
+			end
+			for _, closePopup in ipairs(window.ClosePopups) do closePopup() end
+			for _, closeFloating in ipairs(window.CloseFloating) do closeFloating() end
+		end
+
+		function bar:AddTab(tabName)
+			local tab = {Name = tabName, Active = false, Hovered = false}
+			local textWidth = TextService:GetTextSize(tostring(tabName), Style.FontSize, Style.Font, Vector2.new(1000, 100)).X
+
+			tab.Button = create("TextButton", {
+				Size = UDim2.fromOffset(textWidth + 12, Style.FrameHeight),
+				BorderSizePixel = 0,
+				AutoButtonColor = false,
+				Text = "",
+				LayoutOrder = #tabs + 1,
+			}, Bar)
+			create("UICorner", {CornerRadius = UDim.new(0, 4)}, tab.Button)
+			tab.Filler = create("Frame", {
+				Position = UDim2.new(0, 0, 1, -4),
+				Size = UDim2.new(1, 0, 0, 4),
+				BorderSizePixel = 0,
+				ZIndex = 1,
+			}, tab.Button)
+			label(tab.Button, {
+				Size = UDim2.fromScale(1, 1),
+				Text = tostring(tabName),
+				TextXAlignment = Enum.TextXAlignment.Center,
+				ZIndex = 2,
+			})
+
+			tab.Page = newBox(Pages, #tabs + 1)
+			tab.Page.Visible = false
+
+			tab.Refresh = function()
+				local pair = tab.Active and Style.TabActive or (tab.Hovered and Style.TabHovered or Style.Tab)
+				paint(tab.Button, pair)
+				paint(tab.Filler, pair)
+			end
+			table.insert(Restylers, tab.Refresh)
+
+			tab.Button.MouseEnter:Connect(function() tab.Hovered = true tab.Refresh() end)
+			tab.Button.MouseLeave:Connect(function() tab.Hovered = false tab.Refresh() end)
+			tab.Button.MouseButton1Click:Connect(function() selectTab(tab) end)
+
+			table.insert(tabs, tab)
+			if #tabs == 1 then selectTab(tab) else tab.Refresh() end
+
+			local section = buildProxy(window, tab.Page)
+			section.Name = tabName
+			function section:Select() selectTab(tab) end
+			return section
+		end
+
+		function bar:SelectTab(tabName)
+			for _, tab in ipairs(tabs) do
+				if tab.Name == tabName then selectTab(tab) return true end
+			end
+			return false
+		end
+		function bar:SetVisible(state) Holder.Visible = state and true or false return self end
+		return bar
+	end
+
+	-- ===== AddSearchBox([targetContainer], [placeholder]) =====
+	-- Filters the direct children (widgets) of targetContainer by any text they contain (names, values, tooltips).
+	-- targetContainer = a tab / section / AddChild region / TabBar page / Instance. Default: the container this box is in.
+	-- api:Refilter() re-applies the filter after you add widgets later.
+	function proxy:AddSearchBox(target, placeholder)
+		local sig = newSignal(nil)
+		local hiddenByUs = setmetatable({}, {__mode = "k"})
+
+		local Row = newRow()
+		local Box = themeText(create("TextBox", {
+			Size = UDim2.new(1, 0, 1, 0),
+			BorderSizePixel = 0,
+			Font = Style.Font,
+			TextSize = Style.FontSize,
+			TextColor3 = Style.Text,
+			PlaceholderText = placeholder or "Search...",
+			PlaceholderColor3 = Style.TextDisabled,
+			Text = "",
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ClearTextOnFocus = false,
+			ClipsDescendants = true,
+		}, Row))
+		paint(Box, Style.FrameBg)
+		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, Box)
+
+		local function resolve()
+			if typeof(target) == "Instance" then return target end
+			if type(target) == "table" then return target.Content or target.Instance or Content end
+			return Content
+		end
+
+		local function textOf(instance)
+			local parts = {}
+			local function add(item)
+				if (item:IsA("TextLabel") or item:IsA("TextButton") or item:IsA("TextBox"))
+					and item.Name ~= "__blocker" and item.Text ~= "" then
+					table.insert(parts, item.Text)
+				end
+			end
+			add(instance)
+			for _, descendant in ipairs(instance:GetDescendants()) do add(descendant) end
+			local tip = window.Tips[instance]
+			if tip then table.insert(parts, tostring(tip)) end
+			return table.concat(parts, " "):lower()
+		end
+
+		local function filter()
+			local query = Box.Text:lower()
+			for _, child in ipairs(resolve():GetChildren()) do
+				if child:IsA("GuiObject") and child ~= Row and child.Name ~= "__blocker" then
+					local match = query == "" or textOf(child):find(query, 1, true) ~= nil
+					if match then
+						if hiddenByUs[child] then
+							child.Visible = true
+							hiddenByUs[child] = nil
+						end
+					elseif child.Visible then
+						child.Visible = false
+						hiddenByUs[child] = true
+					end
+				end
+			end
+		end
+
+		local hovered, focused = false, false
+		local function refreshBox()
+			paint(Box, focused and Style.FrameBgActive or (hovered and Style.FrameBgHovered or Style.FrameBg))
+		end
+		table.insert(Restylers, refreshBox)
+		Box.MouseEnter:Connect(function() hovered = true refreshBox() end)
+		Box.MouseLeave:Connect(function() hovered = false refreshBox() end)
+		Box.Focused:Connect(function() focused = true refreshBox() end)
+		Box.FocusLost:Connect(function() focused = false refreshBox() end)
+		Box:GetPropertyChangedSignal("Text"):Connect(function()
+			filter()
+			sig:Fire(Box.Text)
+		end)
+
+		local api = {Type = "string", Changed = sig}
+		function api:Get() return Box.Text end
+		function api:Set(text) Box.Text = tostring(text) end
+		function api:Refilter() filter() end
+		function api:SetTarget(newTarget)
+			-- show everything in the old target before switching
+			local old = Box.Text
+			Box.Text = ""
+			target = newTarget
+			Box.Text = old
+		end
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {})
+	end
+
+	-- ===== Layout helpers =====
+	-- AddSpacing([height])
+	function proxy:AddSpacing(height)
+		local Row = create("Frame", {
+			Size = UDim2.new(1, 0, 0, type(height) == "number" and height or 8),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+		}, Content)
+		return Row
+	end
+
+	-- AddDummy(width, height) -- invisible fixed-size placeholder
+	function proxy:AddDummy(width, height)
+		local Row = create("Frame", {
+			Size = UDim2.fromOffset(type(width) == "number" and width or 0, type(height) == "number" and height or Style.FrameHeight),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+		}, Content)
+		local api = {Type = "dummy"}
+		api.Save = function() return nil end
+		return Row, decorate(window, Row, api, {})
+	end
+
+	-- ===== AddCombo = AddDropdown =====
+	proxy.AddCombo = proxy.AddDropdown
+
+	-- ===== AddCheckboxGroup(name, options, [defaultsList], callback) -> callback({checked options}) =====
+	function proxy:AddCheckboxGroup(name, options, defaults, callback)
+		if type(defaults) == "function" then
+			callback = defaults
+			defaults = nil
+		end
+		local sig = newSignal(callback)
+		local opts = {}
+		for index, option in ipairs(options or {}) do opts[index] = option end
+
+		local Group = newBox(Content)
+		local NameLabel
+		if name and name ~= "" then
+			NameLabel = label(Group, {
+				Size = UDim2.new(1, 0, 0, Style.FrameHeight),
+				Text = name,
+				LayoutOrder = -1,
+			})
+		end
+		local sub = buildProxy(window, Group)
+
+		local set = {}
+		if type(defaults) == "table" then
+			for _, option in ipairs(defaults) do set[option] = true end
+		end
+		local function list()
+			local out = {}
+			for _, option in ipairs(opts) do
+				if set[option] then table.insert(out, option) end
+			end
+			return out
+		end
+
+		local checks = {}
+		for _, option in ipairs(opts) do
+			local _, checkApi = sub:AddCheckbox(tostring(option), set[option] == true, function(state)
+				set[option] = state or nil
+				sig:Fire(list())
+			end)
+			checks[option] = checkApi
+		end
+
+		local api = {Type = "table", Changed = sig}
+		function api:Get() return list() end
+		function api:Set(value)
+			set = {}
+			if type(value) == "table" then
+				for _, option in ipairs(value) do set[option] = true end
+			end
+			for option, checkApi in pairs(checks) do
+				checkApi:Set(set[option] == true)
+			end
+		end
+		return Group, decorate(window, Group, api, {nameLabel = NameLabel})
+	end
+
+	-- ===== AddConfigSection([title], [defaultOpen]) -- save / load / list / delete / export in one call =====
+	-- Uses window:SaveConfig / LoadConfig / ListConfigs, so any widget given a flag (api:SetFlag("x")) is included.
+	function proxy:AddConfigSection(title, defaultOpen)
+		if defaultOpen == nil then defaultOpen = true end
+		local section = buildSection(title or "Config", defaultOpen, false)
+
+		local NONE = "(none)"
+		local RED, GREEN = Color3.fromRGB(220, 80, 80), Color3.fromRGB(80, 200, 120)
+
+		local function sanitize(text)
+			local clean = tostring(text or ""):gsub("[^%w_%- ]", "")
+			clean = clean:gsub("^%s+", ""):gsub("%s+$", "")
+			return clean
+		end
+		local function listNames()
+			local names = window:ListConfigs()
+			table.sort(names)
+			if #names == 0 then return {NONE} end
+			return names
+		end
+
+		local _, nameApi = section:AddInputText("Name", "default", "config name")
+		local listApi
+		local function refreshList(select)
+			local names = listNames()
+			listApi:SetOptions(names)
+			if select and table.find(names, select) then listApi:Set(select) end
+		end
+
+		local _, dropdownApi = section:AddDropdown("Configs", listNames(), function(option)
+			if option ~= NONE then nameApi:Set(option) end
+		end)
+		listApi = dropdownApi
+
+		local function currentName()
+			local n = sanitize(nameApi:Get())
+			if n == "" then
+				window:Notify("Enter a config name first", 3, RED)
+				return nil
+			end
+			return n
+		end
+
+		local function doSave()
+			local n = currentName()
+			if not n then return end
+			if not writefile then
+				window:Notify("Your executor has no writefile", 4, RED)
+				return
+			end
+			window:SaveConfig(n)
+			refreshList(n)
+			window:Notify("Saved '" .. n .. "'", 2.5, GREEN)
+		end
+
+		local function doLoad()
+			local n = currentName()
+			if not n then return end
+			if window:LoadConfig(n) then
+				window:Notify("Loaded '" .. n .. "'", 2.5, GREEN)
+			else
+				window:Notify("Could not load '" .. n .. "'", 3, RED)
+			end
+		end
+
+		section:AddRow(2, function(left, right)
+			left:AddButton("Save", doSave)
+			right:AddButton("Load", doLoad)
+		end)
+
+		local canDelete = delfile and isfile
+		local canExport = setclipboard
+		section:AddRow((canDelete and canExport) and 3 or 2, function(...)
+			local cols = {...}
+			local index = 1
+			cols[index]:AddButton("Refresh", function()
+				refreshList(sanitize(nameApi:Get()))
+				window:Notify("Config list refreshed", 1.5)
+			end)
+			index += 1
+			if canDelete then
+				cols[index]:AddButton("Delete", function()
+					local n = currentName()
+					if not n then return end
+					local path = CONFIG_DIR .. "/" .. n .. ".json"
+					local ok = pcall(function()
+						if isfile(path) then delfile(path) else error("missing") end
+					end)
+					if ok then
+						window:Notify("Deleted '" .. n .. "'", 2.5, GREEN)
+						refreshList()
+					else
+						window:Notify("No config named '" .. n .. "'", 3, RED)
+					end
+				end)
+				index += 1
+			end
+			if canExport then
+				cols[index]:AddButton("Copy JSON", function()
+					pcall(setclipboard, window:SaveConfig())
+					window:Notify("Config copied to clipboard", 2.5, GREEN)
+				end)
+			end
+		end)
+
+		section.NameInput = nameApi
+		section.Dropdown = listApi
+		section.Refresh = refreshList
+		section.Save = doSave
+		section.Load = doLoad
+		return section
+	end
+
+	-- =====================================================================================
+	-- END OF EXTRA WIDGETS (the existing `return proxy` follows)
+	-- =====================================================================================
 	return proxy
 end
 
