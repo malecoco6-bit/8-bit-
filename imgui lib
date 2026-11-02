@@ -127,6 +127,7 @@ local Themed = {}            -- instance -> key of the Style pair it uses
 local ThemedText = {}        -- instance -> true (TextColor3 = Style.Text)
 local ThemedPlaceholder = {} -- TextBox -> true (PlaceholderColor3 = Style.TextDisabled)
 local Strokes = {}           -- UIStroke -> true
+local Scrolls = {}           -- ScrollingFrame -> true
 local Restylers = {}
 local PairKeys = {}
 for key, value in pairs(Style) do
@@ -140,6 +141,7 @@ local function create(className, properties, parent)
 		instance[key] = value
 	end
 	instance.Parent = parent
+	if className == "ScrollingFrame" then Scrolls[instance] = true end
 	return instance
 end
 
@@ -212,9 +214,9 @@ local function applyStyle(style)
 		return
 	end
 	-- drop destroyed instances (registries are strong now)
-	for _, registry in ipairs({Themed, ThemedText, ThemedPlaceholder, Strokes}) do
+	for _, registry in ipairs({Themed, ThemedText, ThemedPlaceholder, Strokes, Scrolls}) do
 		for instance in pairs(registry) do
-			if not instance:IsDescendantOf(game) then registry[instance] = nil end
+			if not instance.Parent or not instance:FindFirstAncestorWhichIsA("ScreenGui") then registry[instance] = nil end
 		end
 	end
 	for instance, key in pairs(Themed) do
@@ -231,6 +233,9 @@ local function applyStyle(style)
 	end
 	for instance in pairs(ThemedPlaceholder) do
 		if instance.Parent then instance.PlaceholderColor3 = Style.TextDisabled end
+	end
+	for scroll in pairs(Scrolls) do
+		if scroll.Parent then scroll.ScrollBarImageColor3 = Style.ScrollbarGrab end
 	end
 	for stroke in pairs(Strokes) do
 		if stroke.Parent then
@@ -849,8 +854,12 @@ local function buildProxy(window, Content)
 		local p1 = Vector2.new(3, 10) * scale
 		local p2 = Vector2.new(7.7, 14.7) * scale
 		local p3 = Vector2.new(17.1, 5.3) * scale
-		drawLine(Check, p1, p2, 2, Style.CheckMark)
-		drawLine(Check, p2, p3, 2, Style.CheckMark)
+		local c1 = drawLine(Check, p1, p2, 2, Style.CheckMark)
+		local c2 = drawLine(Check, p2, p3, 2, Style.CheckMark)
+		table.insert(Restylers, function()
+			c1.BackgroundColor3 = Style.CheckMark
+			c2.BackgroundColor3 = Style.CheckMark
+		end)
 
 		local NameLabel = label(Row, {
 			Position = UDim2.fromOffset(size + Style.ItemInnerSpacing, 0),
@@ -917,6 +926,7 @@ local function buildProxy(window, Content)
 		local function refresh()
 			for _, item in ipairs(items) do
 				item.Dot.Visible = item.Option == selected
+				item.Dot.BackgroundColor3 = Style.CheckMark
 				paint(item.Circle, item.Hovered and Style.FrameBgHovered or Style.FrameBg)
 			end
 		end
@@ -961,6 +971,7 @@ local function buildProxy(window, Content)
 			table.insert(items, item)
 		end
 		refresh()
+		table.insert(Restylers, refresh)
 
 		local api = {Type = "string", Changed = sig}
 		function api:Get() return selected end
@@ -1022,7 +1033,7 @@ local function buildProxy(window, Content)
 		local sig = newSignal(callback)
 		local value = math.clamp(defaultVal or min, min, max)
 		local frameH = Style.FrameHeight
-		local range = math.max(max - min, 1)
+		local range = ((max - min) > 0 and (max - min) or 1)
 
 		local Row = newRow()
 
@@ -1051,7 +1062,7 @@ local function buildProxy(window, Content)
 
 		local function metrics()
 			local usable = math.max(Track.AbsoluteSize.X - 4, 1)
-			local grabWidth = math.max(usable / (max - min + 1), 12)
+			local grabWidth = math.max(usable / (range / step + 1), 12)
 			return usable, grabWidth
 		end
 
@@ -1219,7 +1230,7 @@ local function buildProxy(window, Content)
 		if type(step) ~= "number" or step <= 0 then step = 1 end
 		local sig = newSignal(callback)
 		local frameH = Style.FrameHeight
-		local range = math.max(max - min, 1)
+		local range = ((max - min) > 0 and (max - min) or 1)
 		local low = math.clamp(lowDefault or min, min, max)
 		local high = math.clamp(highDefault or max, min, max)
 		if low > high then low, high = high, low end
@@ -2649,8 +2660,11 @@ local function buildProxy(window, Content)
 			if isHeader then
 				paint(R, Style.Header)
 			elseif order % 2 == 0 then
-				R.BackgroundColor3 = Color3.new(1, 1, 1)
+				R.BackgroundColor3 = Style.Text
 				R.BackgroundTransparency = 0.94
+				table.insert(Restylers, function()
+					if R.Parent then R.BackgroundColor3 = Style.Text end
+				end)
 			else
 				R.BackgroundTransparency = 1
 			end
