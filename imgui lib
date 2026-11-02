@@ -120,10 +120,13 @@ local Themes = {
 }
 
 -- // Theme registry: lets SetStyle repaint already-built widgets
-local Themed = setmetatable({}, {__mode = "k"})            -- instance -> key of the Style pair it uses
-local ThemedText = setmetatable({}, {__mode = "k"})        -- instance -> true (TextColor3 = Style.Text)
-local ThemedPlaceholder = setmetatable({}, {__mode = "k"}) -- TextBox -> true (PlaceholderColor3 = Style.TextDisabled)
-local Strokes = setmetatable({}, {__mode = "k"})           -- UIStroke -> true
+-- NOTE: these must be STRONG tables. With weak keys, Roblox can collect the Lua wrapper of any Instance the
+-- script doesn't reference (separators, discarded labels...), which silently drops it from the registry and
+-- it never gets repainted. Dead instances are pruned in applyStyle instead.
+local Themed = {}            -- instance -> key of the Style pair it uses
+local ThemedText = {}        -- instance -> true (TextColor3 = Style.Text)
+local ThemedPlaceholder = {} -- TextBox -> true (PlaceholderColor3 = Style.TextDisabled)
+local Strokes = {}           -- UIStroke -> true
 local Restylers = {}
 local PairKeys = {}
 for key, value in pairs(Style) do
@@ -207,6 +210,12 @@ local function applyStyle(style)
 		setStyleValues(style)
 	else
 		return
+	end
+	-- drop destroyed instances (registries are strong now)
+	for _, registry in ipairs({Themed, ThemedText, ThemedPlaceholder, Strokes}) do
+		for instance in pairs(registry) do
+			if not instance:IsDescendantOf(game) then registry[instance] = nil end
+		end
 	end
 	for instance, key in pairs(Themed) do
 		if instance.Parent and key and Style[key] then
@@ -3614,7 +3623,7 @@ local function buildProxy(window, Content)
 	-- api:Refilter() re-applies the filter after you add widgets later.
 	function proxy:AddSearchBox(target, placeholder)
 		local sig = newSignal(nil)
-		local hiddenByUs = setmetatable({}, {__mode = "k"})
+		local hiddenByUs = {}
 
 		local Row = newRow()
 		local Box = themeText(create("TextBox", {
