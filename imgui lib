@@ -4411,6 +4411,10 @@ function ImGuiLib:LoadConfigFile(path)
 	return self:LoadConfig((content:match("^%s*(.-)%s*$")))
 end
 
+-- Auto-load was removed. These stubs only exist so older scripts that still call them don't error.
+function ImGuiLib:RunAutoLoad() return false end
+function ImGuiLib:SetAutoLoad() return false end
+
 function ImGuiLib:Destroy()
 	for _, conn in ipairs(self.Connections) do
 		pcall(function() conn:Disconnect() end)
