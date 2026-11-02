@@ -3813,6 +3813,66 @@ local function buildProxy(window, Content)
 			end
 		end)
 
+		-- ----- Import: file browser, path box, pasted JSON, auto-load -----
+		section:AddSeparator("Import")
+
+		local function listFiles()
+			local out, seen = {}, {}
+			if listfiles then
+				for _, folder in ipairs({"", ".", CONFIG_DIR}) do
+					local ok, files = pcall(listfiles, folder)
+					if ok and type(files) == "table" then
+						for _, path in ipairs(files) do
+							local lower = path:lower()
+							if (lower:match("%.txt$") or lower:match("%.json$")) and not seen[path] then
+								seen[path] = true
+								table.insert(out, path)
+							end
+						end
+					end
+				end
+			end
+			table.sort(out)
+			if #out == 0 then out = {NONE} end
+			return out
+		end
+
+		local _, pathApi = section:AddInputText("File path", "", "workspace/path.txt")
+		local _, fileApi = section:AddDropdown("Files (.txt/.json)", listFiles(), function(path)
+			if path ~= NONE then pathApi:Set(path) end
+		end)
+		section:AddRow(2, function(left, right)
+			left:AddButton("Refresh Files", function()
+				fileApi:SetOptions(listFiles())
+			end)
+			right:AddButton("Load From File", function()
+				local path = tostring(pathApi:Get())
+				if path == "" or path == NONE then window:Notify("Pick or type a file path", 3, RED) return end
+				if window:LoadConfigFile(path) then
+					window:Notify("Loaded file", 2.5, GREEN)
+				else
+					window:Notify("Could not load that file", 3, RED)
+				end
+			end)
+		end)
+
+		local _, jsonApi = section:AddInputMultiline("Paste JSON", "", 60)
+		section:AddButton("Import JSON", function()
+			local text = tostring(jsonApi:Get()):match("^%s*(.-)%s*$")
+			if window:LoadConfig(text) then
+				window:Notify("Imported config", 2.5, GREEN)
+			else
+				window:Notify("Invalid JSON", 3, RED)
+			end
+		end)
+
+		section:AddButton("Set as Auto-Load", function()
+			local n = currentName()
+			if n and window:SetAutoLoad(n) then
+				window:Notify("'" .. n .. "' will load on startup", 3, GREEN)
+			end
+		end)
+
 		section.NameInput = nameApi
 		section.Dropdown = listApi
 		section.Refresh = refreshList
@@ -4245,6 +4305,62 @@ function ImGuiLib:ListConfigs()
 		end
 	end
 	return names
+end
+
+-- window:LoadConfigFile("any/path/file.json or .txt") -> true on success
+function ImGuiLib:LoadConfigFile(path)
+	if not (readfile and isfile) then return false end
+	local ok, content = pcall(function()
+		if isfile(path) then return readfile(path) end
+	end)
+	if not ok or not content then return false end
+	content = content:gsub("^\239\187\191", "") -- strip UTF-8 BOM
+	return self:LoadConfig((content:match("^%s*(.-)%s*$")))
+end
+
+-- window:SetAutoLoad("name") remembers a config; window:SetAutoLoad(nil) clears it
+function ImGuiLib:SetAutoLoad(name)
+	if not (writefile and isfile) then return false end
+	pcall(function()
+		if makefolder and isfolder and not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+		writefile(CONFIG_DIR .. "/_autoload.txt", name and tostring(name) or "")
+	end)
+	return true
+end
+
+-- window:RunAutoLoad() -> call it AFTER all widgets are built; true if a config was loaded
+function ImGuiLib:RunAutoLoad()
+	if not (readfile and isfile) then return false end
+	local path = CONFIG_DIR .. "/_autoload.txt"
+	local ok, name = pcall(function()
+		if isfile(path) then return readfile(path) end
+	end)
+	if ok and name and name ~= "" then
+		return self:LoadConfig(name)
+	end
+	return false
+end
+
+-- window:EnableAutoSave("autosave", [seconds]) saves whenever a flagged widget's value changes
+-- Call LoadConfig / RunAutoLoad BEFORE this so defaults don't overwrite your saved file.
+function ImGuiLib:EnableAutoSave(name, interval)
+	interval = interval or 3
+	self.AutoSaveName = name
+	task.spawn(function()
+		local last = self:SaveConfig() -- no name: returns JSON without writing
+		while self.ScreenGui and self.ScreenGui.Parent and self.AutoSaveName == name do
+			task.wait(interval)
+			local json = self:SaveConfig()
+			if json ~= last then
+				last = json
+				self:SaveConfig(name)
+			end
+		end
+	end)
+end
+
+function ImGuiLib:DisableAutoSave()
+	self.AutoSaveName = nil
 end
 
 function ImGuiLib:Destroy()
