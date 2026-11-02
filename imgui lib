@@ -120,9 +120,10 @@ local Themes = {
 }
 
 -- // Theme registry: lets SetStyle repaint already-built widgets
-local Themed = setmetatable({}, {__mode = "k"})      -- instance -> key of the Style pair it uses
-local ThemedText = setmetatable({}, {__mode = "k"})  -- instance -> true (TextColor3 = Style.Text)
-local Strokes = setmetatable({}, {__mode = "k"})     -- UIStroke -> true
+local Themed = setmetatable({}, {__mode = "k"})            -- instance -> key of the Style pair it uses
+local ThemedText = setmetatable({}, {__mode = "k"})        -- instance -> true (TextColor3 = Style.Text)
+local ThemedPlaceholder = setmetatable({}, {__mode = "k"}) -- TextBox -> true (PlaceholderColor3 = Style.TextDisabled)
+local Strokes = setmetatable({}, {__mode = "k"})           -- UIStroke -> true
 local Restylers = {}
 local PairKeys = {}
 for key, value in pairs(Style) do
@@ -147,6 +148,12 @@ end
 
 local function themeText(instance)
 	ThemedText[instance] = true
+	return instance
+end
+
+local function themePlaceholder(instance)
+	ThemedPlaceholder[instance] = true
+	instance.PlaceholderColor3 = Style.TextDisabled
 	return instance
 end
 
@@ -202,14 +209,19 @@ local function applyStyle(style)
 		return
 	end
 	for instance, key in pairs(Themed) do
-		if instance.Parent and instance.BackgroundTransparency < 0.999 then
+		if instance.Parent and key and Style[key] then
 			local pair = Style[key]
-			instance.BackgroundColor3 = pair[1]
-			instance.BackgroundTransparency = pair[2]
+			instance.BackgroundColor3 = pair[1]                -- always update the color
+			if instance.BackgroundTransparency < 0.999 then    -- but don't un-hide invisible hover states
+				instance.BackgroundTransparency = pair[2]
+			end
 		end
 	end
 	for instance in pairs(ThemedText) do
 		if instance.Parent then instance.TextColor3 = Style.Text end
+	end
+	for instance in pairs(ThemedPlaceholder) do
+		if instance.Parent then instance.PlaceholderColor3 = Style.TextDisabled end
 	end
 	for stroke in pairs(Strokes) do
 		if stroke.Parent then
@@ -682,11 +694,21 @@ local function buildProxy(window, Content)
 		return Label, decorate(window, Label, api, {nameLabel = Label})
 	end
 
+	-- FIX: only opts out of theming when a custom color is actually given.
 	function proxy:AddLabelColored(text, color)
 		local Label, api = self:AddLabel(text)
-		ThemedText[Label] = nil
-		Label.TextColor3 = color or Style.Text
-		function api:SetColor(newColor) Label.TextColor3 = newColor end
+		if color then
+			ThemedText[Label] = nil
+			Label.TextColor3 = color
+		end
+		function api:SetColor(newColor)
+			ThemedText[Label] = nil
+			Label.TextColor3 = newColor
+		end
+		function api:ResetColor()
+			ThemedText[Label] = true
+			Label.TextColor3 = Style.Text
+		end
 		return Label, api
 	end
 
@@ -1551,6 +1573,7 @@ local function buildProxy(window, Content)
 			Visible = false,
 			ZIndex = 101,
 		}, Popup))
+		themePlaceholder(SearchBox)
 		paint(SearchBox, Style.FrameBg)
 		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, SearchBox)
 
@@ -1582,6 +1605,7 @@ local function buildProxy(window, Content)
 				end
 			end
 		end
+		table.insert(Restylers, refreshItems)
 
 		local function resizePopup()
 			local count = 0
@@ -1613,6 +1637,7 @@ local function buildProxy(window, Content)
 			paint(Combo, (comboHovered or open) and Style.FrameBgHovered or Style.FrameBg)
 			paint(ArrowButton, comboHovered and Style.ButtonHovered or Style.Button)
 		end
+		table.insert(Restylers, refreshCombo)
 
 		local setOpen
 
@@ -1804,6 +1829,7 @@ local function buildProxy(window, Content)
 				end
 			end
 		end
+		table.insert(Restylers, refreshItems)
 		local function rebuild()
 			for _, item in ipairs(items) do item.Button:Destroy() end
 			items = {}
@@ -2351,6 +2377,7 @@ local function buildProxy(window, Content)
 			ClearTextOnFocus = false,
 			ClipsDescendants = true,
 		}, Row))
+		themePlaceholder(Box)
 		paint(Box, Style.FrameBg)
 		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, Box)
 
@@ -2697,6 +2724,7 @@ local function buildProxy(window, Content)
 				paint(Header, hovered and Style.HeaderHovered or Style.Header)
 			end
 		end
+		table.insert(Restylers, refreshHeader)
 		Header.MouseEnter:Connect(function() hovered = true refreshHeader() end)
 		Header.MouseLeave:Connect(function() hovered = false refreshHeader() end)
 
@@ -3602,6 +3630,7 @@ local function buildProxy(window, Content)
 			ClearTextOnFocus = false,
 			ClipsDescendants = true,
 		}, Row))
+		themePlaceholder(Box)
 		paint(Box, Style.FrameBg)
 		create("UIPadding", {PaddingLeft = UDim.new(0, Style.FramePaddingX)}, Box)
 
