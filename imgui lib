@@ -6,7 +6,17 @@ local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
--- Remove any previous instance
+-- Remove any previous instance (flush its unsaved config first so nothing is lost on re-execute)
+local genv = getgenv and getgenv() or _G
+local prev = genv.__ImGuiActive
+if prev then
+	pcall(function()
+		if prev.AutoSaveName then prev:SaveConfig(prev.AutoSaveName) end -- flush unsaved changes
+		prev:Destroy()                                                  -- also disconnects old listeners
+	end)
+end
+genv.__ImGuiActive = nil
+
 if CoreGui:FindFirstChild("ImGuiCustomLib") then
 	CoreGui.ImGuiCustomLib:Destroy()
 end
@@ -380,6 +390,29 @@ local function attachTooltip(window, target, text)
 	window.Tips[target] = text
 end
 
+-- // Auto-flag helpers: every value widget gets a stable config key automatically.
+-- Key format: "<Tab>/<Section>/<type>:<Widget name>" (+ "#2", "#3" for duplicates).
+local NO_SAVE = {label = true, button = true, image = true, spinner = true, console = true, dummy = true, list = true}
+
+local function cfgPrefix(instance)
+	local node = instance
+	while node do
+		local p = node:GetAttribute("CfgPrefix")
+		if p then return p end
+		node = node.Parent
+	end
+	return ""
+end
+
+local function cfgSkipped(instance)
+	local node = instance
+	while node do
+		if node:GetAttribute("CfgSkip") then return true end
+		node = node.Parent
+	end
+	return false
+end
+
 -- // Shared widget decoration: Get/Set come from the widget, everything else is added here
 local function decorate(window, Row, api, options)
 	options = options or {}
@@ -456,6 +489,16 @@ local function decorate(window, Row, api, options)
 			if api.Changed and api.Get then api.Changed:Fire(api:Get()) end
 		end
 	end
+
+	-- Auto-flag: makes every value widget save/load without calling :SetFlag manually
+	if api.Get and api.Save and not NO_SAVE[api.Type] and not cfgSkipped(Row.Parent) then
+		local label_ = options.nameLabel and options.nameLabel.Text or ""
+		local base = cfgPrefix(Row.Parent) .. "/" .. tostring(api.Type) .. ":" .. label_
+		local n = (window.FlagCounts[base] or 0) + 1
+		window.FlagCounts[base] = n
+		api:SetFlag(n > 1 and (base .. "#" .. n) or base)
+	end
+
 	return api
 end
 
@@ -1399,6 +1442,7 @@ local function buildProxy(window, Content)
 			Fill.Size = UDim2.new(fraction, 0, 1, 0)
 			Overlay.Text = newOverlay or string.format("%d%%", math.floor(fraction * 100 + 0.5))
 		end
+		api.Save = function() return nil end -- progress is runtime state, not a setting
 		return Row, decorate(window, Row, api, {nameLabel = NameLabel})
 	end
 
@@ -2639,6 +2683,7 @@ local function buildProxy(window, Content)
 		})
 
 		local Body = newBox(Holder, 2)
+		Body:SetAttribute("CfgPrefix", cfgPrefix(Holder) .. "/" .. tostring(name))
 		Body.Visible = open
 		if isTree then
 			create("UIPadding", {PaddingLeft = UDim.new(0, 14)}, Body)
@@ -3413,6 +3458,7 @@ local function buildProxy(window, Content)
 			ScrollBarImageColor3 = Style.ScrollbarGrab,
 			VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
 		}, Content)
+		Child:SetAttribute("CfgPrefix", cfgPrefix(Child) .. "/" .. tostring(name or "Child"))
 		border(Child)
 		create("UIListLayout", {
 			SortOrder = Enum.SortOrder.LayoutOrder,
@@ -3501,6 +3547,7 @@ local function buildProxy(window, Content)
 			})
 
 			tab.Page = newBox(Pages, #tabs + 1)
+			tab.Page:SetAttribute("CfgPrefix", cfgPrefix(Holder) .. "/" .. tostring(tabName))
 			tab.Page.Visible = false
 
 			tab.Refresh = function()
@@ -3663,6 +3710,7 @@ local function buildProxy(window, Content)
 		for index, option in ipairs(options or {}) do opts[index] = option end
 
 		local Group = newBox(Content)
+		Group:SetAttribute("CfgSkip", true) -- the group saves itself; inner checkboxes must not
 		local NameLabel
 		if name and name ~= "" then
 			NameLabel = label(Group, {
@@ -3709,10 +3757,11 @@ local function buildProxy(window, Content)
 	end
 
 	-- ===== AddConfigSection([title], [defaultOpen]) -- save / load / list / delete / export in one call =====
-	-- Uses window:SaveConfig / LoadConfig / ListConfigs, so any widget given a flag (api:SetFlag("x")) is included.
+	-- Uses window:SaveConfig / LoadConfig / ListConfigs, so every value widget is included automatically.
 	function proxy:AddConfigSection(title, defaultOpen)
 		if defaultOpen == nil then defaultOpen = true end
 		local section = buildSection(title or "Config", defaultOpen, false)
+		section.Content:SetAttribute("CfgSkip", true) -- name box / file path / pasted JSON must not be saved
 
 		local NONE = "(none)"
 		local RED, GREEN = Color3.fromRGB(220, 80, 80), Color3.fromRGB(80, 200, 120)
@@ -3881,9 +3930,6 @@ local function buildProxy(window, Content)
 		return section
 	end
 
-	-- =====================================================================================
-	-- END OF EXTRA WIDGETS (the existing `return proxy` follows)
-	-- =====================================================================================
 	return proxy
 end
 
@@ -3900,6 +3946,8 @@ function ImGuiLib.new(windowTitle)
 	self.Connections = {}
 	self.Flags = {}
 	self.Tips = {}
+	self.FlagCounts = {}       -- auto-flag duplicate counter
+	genv.__ImGuiActive = self  -- so a re-execute can flush + destroy this window
 	self.ActiveTabContent = nil
 	self.Title = windowTitle or "Dear ImGui Window"
 	self._tabCounter = 0
@@ -4243,7 +4291,7 @@ function ImGuiLib:SetStyle(style)
 	for _, tab in ipairs(self.Tabs) do tab.Refresh() end
 end
 
--- // Config: widgets with a flag (api:SetFlag("speed")) are saved/loaded by name
+-- // Config: every value widget is saved/loaded automatically (flag = "<Tab>/<Section>/<type>:<name>")
 local function configPath(name)
 	return CONFIG_DIR .. "/" .. tostring(name) .. ".json"
 end
@@ -4260,7 +4308,7 @@ function ImGuiLib:SaveConfig(name)
 	local json = HttpService:JSONEncode(data)
 	if name and writefile then
 		pcall(function()
-			if makefolder and isfolder and not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+			if makefolder then pcall(makefolder, CONFIG_DIR) end
 			writefile(configPath(name), json)
 		end)
 	end
@@ -4270,9 +4318,10 @@ end
 -- window:LoadConfig("name") or window:LoadConfig(jsonString) -> true on success
 function ImGuiLib:LoadConfig(source)
 	local json
-	if type(source) == "string" and source:sub(1, 1) == "{" then
+	local first = type(source) == "string" and source:sub(1, 1)
+	if first == "{" or first == "[" then
 		json = source
-	elseif readfile and isfile then
+	elseif readfile and isfile and source then
 		local ok, content = pcall(function()
 			local path = configPath(source)
 			if isfile(path) then return readfile(path) end
@@ -4348,8 +4397,9 @@ function ImGuiLib:EnableAutoSave(name, interval)
 	self.AutoSaveName = name
 	task.spawn(function()
 		local last = self:SaveConfig() -- no name: returns JSON without writing
-		while self.ScreenGui and self.ScreenGui.Parent and self.AutoSaveName == name do
+		while true do
 			task.wait(interval)
+			if not (self.ScreenGui and self.ScreenGui.Parent and self.AutoSaveName == name) then break end
 			local json = self:SaveConfig()
 			if json ~= last then
 				last = json
@@ -4368,6 +4418,7 @@ function ImGuiLib:Destroy()
 		pcall(function() conn:Disconnect() end)
 	end
 	self.Connections = {}
+	if genv.__ImGuiActive == self then genv.__ImGuiActive = nil end
 	if self.ScreenGui then
 		self.ScreenGui:Destroy()
 	end
@@ -4421,6 +4472,7 @@ function ImGuiLib:AddTab(tabName)
 		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
 		Visible = false,
 	}, window.Body)
+	TabContent:SetAttribute("CfgPrefix", tostring(tabName))
 
 	create("UIPadding", {
 		PaddingLeft = UDim.new(0, Style.WindowPadding),
