@@ -6,13 +6,12 @@ local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
--- Remove any previous instance (flush its unsaved config first so nothing is lost on re-execute)
+-- Remove any previous instance
 local genv = getgenv and getgenv() or _G
 local prev = genv.__ImGuiActive
 if prev then
 	pcall(function()
-		if prev.AutoSaveName then prev:SaveConfig(prev.AutoSaveName) end -- flush unsaved changes
-		prev:Destroy()                                                  -- also disconnects old listeners
+		prev:Destroy() -- also disconnects old listeners
 	end)
 end
 genv.__ImGuiActive = nil
@@ -3999,7 +3998,7 @@ function ImGuiLib.new(windowTitle)
 	self.Flags = {}
 	self.Tips = {}
 	self.FlagCounts = {}       -- auto-flag duplicate counter
-	genv.__ImGuiActive = self  -- so a re-execute can flush + destroy this window
+	genv.__ImGuiActive = self  -- so a re-execute can destroy this window
 	self.ActiveTabContent = nil
 	self.Title = windowTitle or "Dear ImGui Window"
 	self._tabCounter = 0
@@ -4440,29 +4439,6 @@ function ImGuiLib:RunAutoLoad()
 		return self:LoadConfig(name)
 	end
 	return false
-end
-
--- window:EnableAutoSave("autosave", [seconds]) saves whenever a flagged widget's value changes
--- Call LoadConfig / RunAutoLoad BEFORE this so defaults don't overwrite your saved file.
-function ImGuiLib:EnableAutoSave(name, interval)
-	interval = interval or 3
-	self.AutoSaveName = name
-	task.spawn(function()
-		local last = self:SaveConfig() -- no name: returns JSON without writing
-		while true do
-			task.wait(interval)
-			if not (self.ScreenGui and self.ScreenGui.Parent and self.AutoSaveName == name) then break end
-			local json = self:SaveConfig()
-			if json ~= last then
-				last = json
-				self:SaveConfig(name)
-			end
-		end
-	end)
-end
-
-function ImGuiLib:DisableAutoSave()
-	self.AutoSaveName = nil
 end
 
 function ImGuiLib:Destroy()
