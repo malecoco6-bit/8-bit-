@@ -3913,7 +3913,7 @@ local function buildProxy(window, Content)
 			end
 		end)
 
-		-- ----- Import: file browser, path box, pasted JSON, auto-load -----
+		-- ----- Import: file browser, path box, pasted JSON -----
 		section:AddSeparator("Import")
 
 		local function listFiles()
@@ -3963,13 +3963,6 @@ local function buildProxy(window, Content)
 				window:Notify("Imported config", 2.5, GREEN)
 			else
 				window:Notify("Invalid JSON", 3, RED)
-			end
-		end)
-
-		section:AddButton("Set as Auto-Load", function()
-			local n = currentName()
-			if n and window:SetAutoLoad(n) then
-				window:Notify("'" .. n .. "' will load on startup", 3, GREEN)
 			end
 		end)
 
@@ -4416,29 +4409,6 @@ function ImGuiLib:LoadConfigFile(path)
 	if not ok or not content then return false end
 	content = content:gsub("^\239\187\191", "") -- strip UTF-8 BOM
 	return self:LoadConfig((content:match("^%s*(.-)%s*$")))
-end
-
--- window:SetAutoLoad("name") remembers a config; window:SetAutoLoad(nil) clears it
-function ImGuiLib:SetAutoLoad(name)
-	if not (writefile and isfile) then return false end
-	pcall(function()
-		if makefolder and isfolder and not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
-		writefile(CONFIG_DIR .. "/_autoload.txt", name and tostring(name) or "")
-	end)
-	return true
-end
-
--- window:RunAutoLoad() -> call it AFTER all widgets are built; true if a config was loaded
-function ImGuiLib:RunAutoLoad()
-	if not (readfile and isfile) then return false end
-	local path = CONFIG_DIR .. "/_autoload.txt"
-	local ok, name = pcall(function()
-		if isfile(path) then return readfile(path) end
-	end)
-	if ok and name and name ~= "" then
-		return self:LoadConfig(name)
-	end
-	return false
 end
 
 function ImGuiLib:Destroy()
