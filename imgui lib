@@ -264,6 +264,15 @@ local function fmt(n)
 	return s
 end
 
+-- Rounds a value to the number of decimals in `step` so 0.1 steps don't produce 0.30000000000000004
+local function roundToStep(value, step)
+	local s = (string.format("%.10f", step):gsub("0+$", ""))
+	local dot = s:find(".", 1, true)
+	local decimals = dot and (#s - dot) or 0
+	local m = 10 ^ decimals
+	return math.floor(value * m + 0.5) / m
+end
+
 -- Simple signal: constructor callback + extra listeners (api:OnChanged returns a connection)
 local function newSignal(callback)
 	local sig = {Listeners = {}}
@@ -285,7 +294,8 @@ end
 
 -- Mouse coordinates and GUI coordinates can differ vertically (top-bar inset) depending on the
 -- executor / Roblox version. Instead of guessing, learn the shift from a press on a small element:
--- whichever candidate shift puts the click inside that element is the right one.
+-- whichever candidate shift puts the click inside that element is the right one. When several
+-- candidates fit, the one landing closest to the element's center wins.
 -- Only used for color-picker drag math. Popups use hover state, not coordinates.
 local DEBUG = false
 local yShift = 0
@@ -294,15 +304,22 @@ local function calibrate(input, guiObject)
 	local py = input.Position.Y
 	local top = guiObject.AbsolutePosition.Y
 	local bottom = top + guiObject.AbsoluteSize.Y
+	local center = (top + bottom) / 2
 	local inset = GuiService:GetGuiInset().Y
 	local diff = UserInputService:GetMouseLocation().Y - py
+	local bestShift, bestDist
 	for _, shift in ipairs({0, diff, -diff, inset, -inset}) do
 		local y = py + shift
 		if y >= top and y <= bottom then
-			yShift = shift
-			if DEBUG then print("[ImGuiLib] y shift =", shift) end
-			return
+			local dist = math.abs(y - center)
+			if not bestDist or dist < bestDist then
+				bestShift, bestDist = shift, dist
+			end
 		end
+	end
+	if bestShift then
+		yShift = bestShift
+		if DEBUG then print("[ImGuiLib] y shift =", bestShift) end
 	end
 end
 
@@ -394,18 +411,27 @@ function ImGuiLib.ApplyStyle(style)
 end
 
 -- // Tooltip
+-- A token counter makes stale delays harmless: leaving and re-entering a widget within the delay
+-- can no longer trigger the tooltip early from the first hover.
 local function attachTooltip(window, target, text)
 	if not target then return end
-	if window.Tips[target] == nil then
+	window.TipWired = window.TipWired or {}
+	window.TipToken = window.TipToken or 0
+	if not window.TipWired[target] then
+		window.TipWired[target] = true
 		target.MouseEnter:Connect(function()
 			window.TipHover = target
+			window.TipToken += 1
+			local token = window.TipToken
 			task.delay(0.4, function()
-				if window.TipHover == target and window.Tips[target] and window.Tips[target] ~= "" then
-					window:_showTip(window.Tips[target])
+				local tip = window.Tips[target]
+				if window.TipToken == token and window.TipHover == target and tip and tip ~= "" then
+					window:_showTip(tip)
 				end
 			end)
 		end)
 		target.MouseLeave:Connect(function()
+			window.TipToken += 1
 			if window.TipHover == target then
 				window.TipHover = nil
 				window:_hideTip()
@@ -1088,7 +1114,7 @@ local function buildProxy(window, Content)
 			if travel <= 0 then return end
 			local alpha = math.clamp((mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2) / travel, 0, 1)
 			local raw = min + alpha * range
-			local newValue = math.clamp(math.floor((raw - min) / step + 0.5) * step + min, min, max)
+			local newValue = math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step), min, max)
 			if newValue ~= value then
 				value = newValue
 				refresh()
@@ -1277,7 +1303,7 @@ local function buildProxy(window, Content)
 		local function valueFromX(x)
 			local alpha = math.clamp((x - Track.AbsolutePosition.X - 2 - GRAB_W / 2) / travel(), 0, 1)
 			local raw = min + alpha * range
-			return math.clamp(math.floor((raw - min) / step + 0.5) * step + min, min, max)
+			return math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step), min, max)
 		end
 
 		local hovered, active = false, nil
@@ -1408,7 +1434,7 @@ local function buildProxy(window, Content)
 			Button.MouseEnter:Connect(function() paint(Button, Style.ButtonHovered) end)
 			Button.MouseLeave:Connect(function() paint(Button, Style.Button) end)
 			Button.MouseButton1Click:Connect(function()
-				local newValue = clampNumber(value + delta * step)
+				local newValue = clampNumber(roundToStep(value + delta * step, step))
 				if newValue ~= value then
 					value = newValue
 					Box.Text = fmt(value)
@@ -2481,6 +2507,7 @@ local function buildProxy(window, Content)
 			refreshButton()
 		end)
 		Button.MouseButton2Click:Connect(function()
+			if listening then return end -- don't cycle the mode while waiting for a key
 			local index = table.find(KEYBIND_MODES, mode) or 1
 			mode = KEYBIND_MODES[index % #KEYBIND_MODES + 1]
 			setActive(mode == "Always")
@@ -2639,6 +2666,14 @@ local function buildProxy(window, Content)
 		local frameH = Style.FrameHeight
 		local n = math.max(#columns, 1)
 
+		-- One restyler per table (not per row) so Add/Clear never leaks closures into the global list
+		local striped = {}
+		table.insert(Restylers, function()
+			for stripe in pairs(striped) do
+				if stripe.Parent then stripe.BackgroundColor3 = Style.Text end
+			end
+		end)
+
 		local Holder = create("Frame", {
 			Size = UDim2.new(1, 0, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
@@ -2661,9 +2696,7 @@ local function buildProxy(window, Content)
 			elseif order % 2 == 0 then
 				R.BackgroundColor3 = Style.Text
 				R.BackgroundTransparency = 0.94
-				table.insert(Restylers, function()
-					if R.Parent then R.BackgroundColor3 = Style.Text end
-				end)
+				striped[R] = true
 			else
 				R.BackgroundTransparency = 1
 			end
@@ -2686,7 +2719,10 @@ local function buildProxy(window, Content)
 			table.insert(dataRows, makeRow(cells, #dataRows + 1, false))
 		end
 		function api:Clear()
-			for _, rowFrame in ipairs(dataRows) do rowFrame:Destroy() end
+			for _, rowFrame in ipairs(dataRows) do
+				striped[rowFrame] = nil
+				rowFrame:Destroy()
+			end
 			dataRows = {}
 		end
 		function api:SetRows(newRows)
@@ -2702,8 +2738,7 @@ local function buildProxy(window, Content)
 	-- ===== Containers =====
 	local function buildSection(name, defaultOpen, isTree)
 		local frameH = Style.FrameHeight
-		local open = defaultOpen ~= false and defaultOpen ~= nil and true or (defaultOpen == true)
-		if defaultOpen == nil then open = false end
+		local open = defaultOpen == true
 
 		local Holder = newBox(Content)
 		local Header = create("TextButton", {
@@ -2997,24 +3032,28 @@ local function buildProxy(window, Content)
 		end
 		mask()
 
-		-- Reconstruct the real text from what was typed, using the length change + cursor position
+		-- Reconstruct the real text from what was typed. Everything after the cursor is untouched old
+		-- text, and the edit region is whatever sits between the common "*" prefix and the cursor, so
+		-- typing, deleting, selecting-and-replacing and pasting over a selection all stay in sync.
 		Box:GetPropertyChangedSignal("Text"):Connect(function()
 			if internal then return end
 			local text = Box.Text
 			local old = #real
-			local pos = Box.CursorPosition - 1 -- characters before the cursor
-			if pos < 0 then pos = #text end
-			if #text > old then
-				local n = #text - old
-				local start = math.max(pos - n, 0)
-				local inserted = text:sub(start + 1, start + n)
-				real = real:sub(1, start) .. inserted .. real:sub(start + 1)
-				pos = start + n
-			elseif #text < old then
-				local n = old - #text
-				real = real:sub(1, pos) .. real:sub(pos + n + 1)
+			local cursor = Box.CursorPosition - 1 -- characters before the cursor
+			if cursor < 0 then cursor = #text end
+			cursor = math.min(cursor, #text)
+
+			local suffix = math.min(#text - cursor, old)
+			local keepEnd = old - suffix -- old chars that precede the edit region
+
+			local prefix = 0
+			while prefix < keepEnd and prefix < cursor and text:sub(prefix + 1, prefix + 1) == "*" do
+				prefix += 1
 			end
-			mask(pos + 1)
+
+			local inserted = text:sub(prefix + 1, cursor)
+			real = real:sub(1, prefix) .. inserted .. real:sub(keepEnd + 1)
+			mask(cursor + 1)
 		end)
 
 		local hovered, focused = false, false
@@ -3990,6 +4029,8 @@ function ImGuiLib.new(windowTitle)
 	self.Connections = {}
 	self.Flags = {}
 	self.Tips = {}
+	self.TipWired = {}         -- widgets that already have tooltip hover hooks
+	self.TipToken = 0          -- invalidates stale tooltip delays
 	self.FlagCounts = {}       -- auto-flag duplicate counter
 	genv.__ImGuiActive = self  -- so a re-execute can destroy this window
 	self.ActiveTabContent = nil
@@ -4275,6 +4316,16 @@ function ImGuiLib:RemoveTab(name)
 	for index, tab in ipairs(self.Tabs) do
 		if tab.Name == name then
 			table.remove(self.Tabs, index)
+
+			-- forget the config flags of every widget that lived in this tab
+			local prefix = tostring(name) .. "/"
+			for flag in pairs(self.Flags) do
+				if flag:sub(1, #prefix) == prefix then self.Flags[flag] = nil end
+			end
+			for key in pairs(self.FlagCounts) do
+				if key:sub(1, #prefix) == prefix then self.FlagCounts[key] = nil end
+			end
+
 			tab.Button:Destroy()
 			tab.Content:Destroy()
 			if tab.Active then
