@@ -4581,4 +4581,152 @@ function ImGuiLib:AddTab(tabName)
 	return proxy
 end
 
+-- // JSON support
+-- ImGuiLib.StyleFromJSON(jsonStringOrTable) -> style table for ImGuiLib.ApplyStyle / window:SetStyle
+--   { "Text": "#E6E6E6", "WindowBg": ["#101018", 0.05], "FrameHeight": 22, "Font": "Code" }
+--   "#hex" -> Color3, ["#hex", transparency] -> {Color3, transparency}, numbers stay numbers.
+-- ImGuiLib.FromJSON(jsonStringOrTable, handlers) -> window, widgets  (see the spec format below)
+--
+-- {
+--   "title": "My Window", "style": "Light" | { ...style keys... }, "size": [380, 330],
+--   "position": [100, 100], "toggleKey": "RightShift",
+--   "tabs": [ { "name": "Main", "items": [ ...items... ] } ]
+-- }
+--
+-- Item: { "type": "Slider", "args": ["Speed", 0, 100, 16, 1, "$on"], "on": "speed", "id": "speed",
+--         "tooltip": "text", "enabled": false, "visible": false }
+--   type  = any Add* method name without "Add" (Slider, Checkbox, Dropdown, ColorPicker, Keybind, ...)
+--   args  = the method's arguments in order. "$on" is replaced by handlers[item.on].
+--           If "$on" is absent and item.on is set, the handler is appended as the last argument.
+--           {"$color": "#4296FA"} -> Color3, {"$key": "RightShift"} -> Enum.KeyCode
+--   id    = widgets[id] gives you the api (Get/Set/...) or the section afterwards
+--   items = children, for CollapsingHeader / TreeNode / Child
+-- Row:    { "type": "Row", "widths": [1, 2], "columns": [ [items...], [items...] ] }
+-- TabBar: { "type": "TabBar", "id": "bar", "tabs": [ { "name": "A", "items": [ ... ] } ] }
+local function jsonSource(source)
+	if type(source) == "string" then
+		local ok, data = pcall(function() return HttpService:JSONDecode(source) end)
+		if ok then return data end
+		return nil
+	end
+	return source
+end
+
+function ImGuiLib.StyleFromJSON(source)
+	local data = jsonSource(source)
+	local style = {}
+	if type(data) ~= "table" then return style end
+	for key, value in pairs(data) do
+		if key == "Font" then
+			local ok, font = pcall(function() return Enum.Font[tostring(value)] end)
+			if ok and font then style[key] = font end
+		elseif type(value) == "string" then
+			local color = fromHex(value)
+			if color then style[key] = color end
+		elseif type(value) == "table" then
+			local color = type(value[1]) == "string" and fromHex(value[1])
+			if color and type(value[2]) == "number" then style[key] = {color, value[2]} end
+		elseif type(value) == "number" then
+			style[key] = value
+		end
+	end
+	return style
+end
+
+local function convertArg(arg, item, handlers)
+	if arg == "$on" then return handlers[item.on] end
+	if type(arg) == "table" then
+		if arg["$color"] then return (fromHex(arg["$color"])) end
+		if arg["$key"] then
+			local ok, key = pcall(function() return Enum.KeyCode[arg["$key"]] end)
+			return ok and key or nil
+		end
+	end
+	return arg
+end
+
+local function buildItems(container, items, handlers, widgets)
+	for _, item in ipairs(items or {}) do
+		local ok, err = pcall(function()
+			local kind = item.type
+			if kind == "Row" then
+				local cols = {container:AddRow(item.widths or #(item.columns or {}))}
+				for index, columnItems in ipairs(item.columns or {}) do
+					if cols[index] then buildItems(cols[index], columnItems, handlers, widgets) end
+				end
+			elseif kind == "TabBar" then
+				local bar = container:AddTabBar()
+				for _, tab in ipairs(item.tabs or {}) do
+					buildItems(bar:AddTab(tostring(tab.name or "Tab")), tab.items, handlers, widgets)
+				end
+				if item.id then widgets[item.id] = bar end
+			else
+				local method = container["Add" .. tostring(kind)]
+				if type(method) ~= "function" then
+					error("unknown widget type '" .. tostring(kind) .. "'")
+				end
+				local raw = item.args or {}
+				local count = #raw
+				local args = {}
+				local hasMarker = false
+				for index = 1, count do
+					if raw[index] == "$on" then hasMarker = true end
+					args[index] = convertArg(raw[index], item, handlers)
+				end
+				if item.on and not handlers[item.on] then
+					warn("[ImGuiLib] no handler named '" .. tostring(item.on) .. "'")
+				end
+				if not hasMarker and item.on and handlers[item.on] then
+					count += 1
+					args[count] = handlers[item.on]
+				end
+
+				local first, second = method(container, table.unpack(args, 1, count))
+
+				-- headers / tree nodes / child regions return a section you can nest into
+				if item.items and type(first) == "table" and first.Content then
+					buildItems(first, item.items, handlers, widgets)
+				end
+				if type(second) == "table" then
+					if item.tooltip and second.SetTooltip then second:SetTooltip(item.tooltip) end
+					if item.enabled == false and second.SetEnabled then second:SetEnabled(false) end
+					if item.visible == false and second.SetVisible then second:SetVisible(false) end
+				end
+				if item.id then widgets[item.id] = second or first end
+			end
+		end)
+		if not ok then warn("[ImGuiLib] JSON item failed:", err) end
+	end
+end
+
+function ImGuiLib.FromJSON(source, handlers)
+	local spec = jsonSource(source)
+	if type(spec) ~= "table" then error("ImGuiLib.FromJSON: invalid JSON", 2) end
+	handlers = handlers or {}
+
+	-- style first: fonts and sizes only affect widgets built afterwards
+	if type(spec.style) == "string" then
+		ImGuiLib.ApplyStyle(spec.style)
+	elseif type(spec.style) == "table" then
+		ImGuiLib.ApplyStyle(ImGuiLib.StyleFromJSON(spec.style))
+	end
+
+	local window = ImGuiLib.new(spec.title)
+	if type(spec.size) == "table" then
+		window:SetSize(tonumber(spec.size[1]) or 380, tonumber(spec.size[2]) or 330)
+	end
+	if type(spec.position) == "table" then
+		window:SetPosition(tonumber(spec.position[1]) or 0, tonumber(spec.position[2]) or 0)
+	end
+	if spec.toggleKey then
+		pcall(function() window:SetToggleKey(Enum.KeyCode[spec.toggleKey]) end)
+	end
+
+	local widgets = {}
+	for _, tab in ipairs(spec.tabs or {}) do
+		buildItems(window:AddTab(tostring(tab.name or "Tab")), tab.items, handlers, widgets)
+	end
+	return window, widgets
+end
+
 return ImGuiLib
