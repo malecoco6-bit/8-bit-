@@ -103,28 +103,6 @@ local Themes = {
 		ScrollbarGrab = Color3.fromRGB(176, 176, 176),
 		ResizeGrip = {Color3.fromRGB(89, 89, 89), 0.8},
 	},
-	Classic = {
-		Text = Color3.fromRGB(230, 230, 230),
-		WindowBg = {Color3.fromRGB(0, 0, 0), 0.15},
-		PopupBg = {Color3.fromRGB(28, 28, 36), 0.06},
-		Border = {Color3.fromRGB(128, 128, 128), 0.5},
-		TitleBgActive = {Color3.fromRGB(69, 69, 138), 0},
-		FrameBg = {Color3.fromRGB(110, 110, 110), 0.61},
-		FrameBgHovered = {Color3.fromRGB(120, 120, 176), 0.6},
-		FrameBgActive = {Color3.fromRGB(107, 105, 163), 0.31},
-		Button = {Color3.fromRGB(89, 102, 156), 0.38},
-		ButtonHovered = {Color3.fromRGB(102, 122, 181), 0.21},
-		Header = {Color3.fromRGB(102, 102, 230), 0.55},
-		HeaderHovered = {Color3.fromRGB(115, 115, 230), 0.2},
-		HeaderSelected = {Color3.fromRGB(102, 102, 230), 0.4},
-		Tab = {Color3.fromRGB(70, 70, 140), 0},
-		TabHovered = {Color3.fromRGB(102, 102, 230), 0.2},
-		TabActive = {Color3.fromRGB(90, 90, 180), 0},
-		CheckMark = Color3.fromRGB(230, 230, 230),
-		SliderGrab = Color3.fromRGB(179, 179, 230),
-		SliderGrabActive = Color3.fromRGB(207, 207, 255),
-		ScrollbarGrab = Color3.fromRGB(79, 79, 79),
-	},
 }
 
 -- // Theme registry: lets SetStyle repaint already-built widgets
@@ -422,7 +400,7 @@ function ImGuiLib.SetDebug(value)
 	DEBUG = value and true or false
 end
 
--- ImGuiLib.ApplyStyle("Light" | "Dark" | "Classic" | {Key = value, ...}) restyles every window.
+-- ImGuiLib.ApplyStyle("Light" | "Dark" | {Key = value, ...}) restyles every window.
 function ImGuiLib.ApplyStyle(style)
 	applyStyle(style)
 end
@@ -4401,7 +4379,7 @@ function ImGuiLib:Notify(text, duration, color)
 	return Toast
 end
 
--- window:SetStyle("Light" | "Dark" | "Classic" | {Key = value, ...})
+-- window:SetStyle("Light" | "Dark" | {Key = value, ...})
 function ImGuiLib:SetStyle(style)
 	applyStyle(style)
 	for _, tab in ipairs(self.Tabs) do tab.Refresh() end
