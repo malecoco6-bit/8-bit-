@@ -16,8 +16,17 @@ if prev then
 end
 genv.__ImGuiActive = nil
 
-if CoreGui:FindFirstChild("ImGuiCustomLib") then
-	CoreGui.ImGuiCustomLib:Destroy()
+-- Destroy every window from a previous run (not just the last one), then any leftover GUIs
+local previousWindows = genv.__ImGuiWindows
+if previousWindows then
+	for _, w in ipairs({table.unpack(previousWindows)}) do
+		pcall(function() w:Destroy() end)
+	end
+end
+genv.__ImGuiWindows = {}
+
+for _, child in ipairs(CoreGui:GetChildren()) do
+	if child.Name == "ImGuiCustomLib" then child:Destroy() end
 end
 
 local CONFIG_DIR = "ImGuiLib"
@@ -264,11 +273,19 @@ local function fmt(n)
 	return s
 end
 
--- Rounds a value to the number of decimals in `step` so 0.1 steps don't produce 0.30000000000000004
-local function roundToStep(value, step)
-	local s = (string.format("%.10f", step):gsub("0+$", ""))
+local function decimalsOf(n)
+	local s = (string.format("%.10f", math.abs(n)):gsub("0+$", ""))
 	local dot = s:find(".", 1, true)
-	local decimals = dot and (#s - dot) or 0
+	return dot and (#s - dot) or 0
+end
+
+-- Rounds away float noise (0.30000000000000004) without losing real precision: it keeps the decimals
+-- of `step` AND of every reference number passed after it (the slider's min, the current value...).
+local function roundToStep(value, step, ...)
+	local decimals = decimalsOf(step)
+	for _, ref in ipairs({...}) do
+		decimals = math.max(decimals, decimalsOf(ref))
+	end
 	local m = 10 ^ decimals
 	return math.floor(value * m + 0.5) / m
 end
@@ -1114,7 +1131,7 @@ local function buildProxy(window, Content)
 			if travel <= 0 then return end
 			local alpha = math.clamp((mouseX - Track.AbsolutePosition.X - 2 - grabWidth / 2) / travel, 0, 1)
 			local raw = min + alpha * range
-			local newValue = math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step), min, max)
+			local newValue = math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step, min), min, max)
 			if newValue ~= value then
 				value = newValue
 				refresh()
@@ -1303,7 +1320,7 @@ local function buildProxy(window, Content)
 		local function valueFromX(x)
 			local alpha = math.clamp((x - Track.AbsolutePosition.X - 2 - GRAB_W / 2) / travel(), 0, 1)
 			local raw = min + alpha * range
-			return math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step), min, max)
+			return math.clamp(roundToStep(math.floor((raw - min) / step + 0.5) * step + min, step, min), min, max)
 		end
 
 		local hovered, active = false, nil
@@ -1434,7 +1451,7 @@ local function buildProxy(window, Content)
 			Button.MouseEnter:Connect(function() paint(Button, Style.ButtonHovered) end)
 			Button.MouseLeave:Connect(function() paint(Button, Style.Button) end)
 			Button.MouseButton1Click:Connect(function()
-				local newValue = clampNumber(roundToStep(value + delta * step, step))
+				local newValue = clampNumber(roundToStep(value + delta * step, step, value, min or 0))
 				if newValue ~= value then
 					value = newValue
 					Box.Text = fmt(value)
@@ -4033,6 +4050,8 @@ function ImGuiLib.new(windowTitle)
 	self.TipToken = 0          -- invalidates stale tooltip delays
 	self.FlagCounts = {}       -- auto-flag duplicate counter
 	genv.__ImGuiActive = self  -- so a re-execute can destroy this window
+	genv.__ImGuiWindows = genv.__ImGuiWindows or {}
+	table.insert(genv.__ImGuiWindows, self)
 	self.ActiveTabContent = nil
 	self.Title = windowTitle or "Dear ImGui Window"
 	self._tabCounter = 0
@@ -4206,6 +4225,7 @@ function ImGuiLib.new(windowTitle)
 	local isCollapsed = false
 	local function setCollapsed(value)
 		isCollapsed = value
+		self._collapsed = value
 		CollapseButton.Text = isCollapsed and "▶" or "▼"
 		paint(self.TopBar, isCollapsed and Style.TitleBgCollapsed or Style.TitleBgActive)
 		self.Body.Visible = not isCollapsed
@@ -4294,7 +4314,8 @@ end
 
 function ImGuiLib:SetSize(x, y)
 	self.Size = Vector2.new(math.max(260, x), math.max(140, y))
-	self.MainFrame.Size = UDim2.fromOffset(self.Size.X, self.Size.Y)
+	-- a collapsed window must stay title-bar height, otherwise an empty bordered box appears
+	self.MainFrame.Size = UDim2.fromOffset(self.Size.X, self._collapsed and Style.FrameHeight or self.Size.Y)
 	for _, closePopup in ipairs(self.ClosePopups) do closePopup() end
 end
 
@@ -4472,6 +4493,11 @@ function ImGuiLib:Destroy()
 	end
 	self.Connections = {}
 	if genv.__ImGuiActive == self then genv.__ImGuiActive = nil end
+	local windows = genv.__ImGuiWindows
+	if windows then
+		local index = table.find(windows, self)
+		if index then table.remove(windows, index) end
+	end
 	if self.ScreenGui then
 		self.ScreenGui:Destroy()
 	end
