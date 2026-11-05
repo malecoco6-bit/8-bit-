@@ -2,37 +2,31 @@
     gamesense / skeet style UI library for Roblox
 
     local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
-    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift })
+    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = false })
 
-    ── tabs (icons) ─────────────────────────────────────────────
-    Window:AddTab({ Name = "Rage" })                  -- icons come from Library.Icons in order
-    Window:AddTab({ Name = "X", Icon = "gear" })      -- by name: headshot, crosshair, visuals, gear, karambit, config
-    Window:AddTab({ Name = "X", Icon = 3 })           -- by number
-    Window:AddTab({ Name = "X", Icon = "rbxassetid://123" })
-    Window:AddConfigTab()                              -- ready made config tab (config icon)
+    ── tabs ─────────────────────────────────────────────────────
+    Window:AddTab({ Name = "Rage" })  Window:AddTab({ Name = "X", Icon = "gear" })  Window:AddConfigTab()
 
     ── sections / elements ──────────────────────────────────────
-    local Aim = Tab:AddSection("Aimbot", "Left")       -- "Left" or "Right"
+    local Aim = Tab:AddSection("Aimbot", "Left")
     Aim:AddToggle(text, default, callback)             -- :Set :Get :SetText :SetTextColor :SetVisible
-        toggle:AddKeybind(key, mode, callback)         -- the [-] on the right
+        toggle:AddKeybind(key, mode, callback)
         toggle:AddColorPicker(color, hasAlpha, callback)
     Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)
     Aim:AddDropdown(text, options, default, callback)  -- :Set :Get :SetOptions
-    Aim:AddDropdown(text, options, {"A"}, callback, true)  -- multi select  (or AddMultiDropdown)
+    Aim:AddMultiDropdown(text, options, {"A"}, callback)
+    Aim:AddListbox(text, options, default, callback, rows, multi)   -- :Set :Get :SetOptions
     Aim:AddKeybind(text, key, mode, callback)          -- modes: "Always", "Hold", "Toggle", "Off"
     Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))
     Aim:AddButton(text, callback)                      -- :SetText
-    Aim:AddLabel(text)                                 -- :Set :SetColor
+    Aim:AddLabel(text)                                 -- :Set :SetColor :AddColorPicker :AddKeybind
     Aim:AddTextbox(text, default, callback)            -- :Get :Set
     Aim:AddSeparator()   Aim:AddSpacer(10)
-    (every element also has :SetVisible(bool))
 
     ── window ───────────────────────────────────────────────────
-    Window:Notify("text", 4)        Window:Toggle()        Window:SetVisible(true)
-    Window:SelectTab("Rage")        Window:SetBind(Enum.KeyCode.Insert)
-    Window:SaveConfig("name")       Window:LoadConfig("name")      Window:DeleteConfig("name")
-    Window:ListConfigs()            Window:ExportConfig()          Window:ImportConfig(jsonString)
-    Window:Destroy()
+    Window:Notify("text", 4)   Window:Toggle()   Window:SetVisible(true)   Window:SelectTab("Rage")
+    Window:SetBind(key)        Window:SetWatermark("text") / Window:SetWatermark(nil) to hide
+    Window:SaveConfig / LoadConfig / DeleteConfig / ListConfigs / ExportConfig / ImportConfig / Destroy
 ]]
 
 local Players          = game:GetService("Players")
@@ -43,9 +37,6 @@ local HttpService      = game:GetService("HttpService")
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
 
--- ───────────────────────── icons ─────────────────────────
--- 1 headshot, 2 crosshair, 3 visuals (sun), 4 gear, 5 karambit, 6 config
--- Tabs automatically use these in order (1st tab = 1st icon, ...).
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
@@ -74,33 +65,32 @@ local function resolveIcon(icon)
     return icon
 end
 
--- ───────────────────────── theme ─────────────────────────
 local Theme = {
     Background = Color3.fromRGB(12, 12, 12),
-    Panel      = Color3.fromRGB(23, 23, 23),   -- popups
-    Section    = Color3.fromRGB(23, 23, 23),   -- section boxes
+    Panel      = Color3.fromRGB(23, 23, 23),
+    Section    = Color3.fromRGB(23, 23, 23),
     Element    = Color3.fromRGB(36, 36, 36),
     CheckOff   = Color3.fromRGB(38, 38, 38),
     Border     = Color3.fromRGB(40, 40, 40),
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(205, 205, 205),
     TextDim    = Color3.fromRGB(140, 140, 140),
-    Accent     = Color3.fromRGB(150, 195, 20), -- gamesense green
+    Accent     = Color3.fromRGB(150, 195, 20),
 
-    TabIcon         = Color3.fromRGB(125, 125, 125), -- unselected tab icon colour
+    TabIcon         = Color3.fromRGB(125, 125, 125),
     TabIconHover    = Color3.fromRGB(190, 190, 190),
-    TabIconSelected = Color3.fromRGB(255, 255, 255), -- selected tab icon colour
+    TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    Font     = Enum.Font.Arial,      -- closest Roblox font to Verdana
+    Font     = Enum.Font.Arial,
     FontBold = Enum.Font.ArialBold,
     TextSize = 12,
 
     Texture = "rbxassetid://8547666218",
-    TabBase = Color3.fromRGB(14, 14, 14),     -- tab bar: colour behind its texture (darker)
-    TabColor = Color3.fromRGB(8, 8, 8),       -- tab bar: texture tint
-    TextureBase = Color3.fromRGB(20, 20, 20), -- page + selected tab: colour behind the texture
-    TextureColor = Color3.fromRGB(12, 12, 12),-- page + selected tab: texture tint
-    TextureTile = 8,                          -- tile size in px
+    TabBase = Color3.fromRGB(14, 14, 14),
+    TabColor = Color3.fromRGB(8, 8, 8),
+    TextureBase = Color3.fromRGB(20, 20, 20),
+    TextureColor = Color3.fromRGB(12, 12, 12),
+    TextureTile = 8,
     TextureTransparency = 0,
 }
 Library.Theme = Theme
@@ -122,6 +112,15 @@ local function stroke(parent, color, thickness)
         Color = color,
         Thickness = thickness or 1,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Parent = parent,
+    })
+end
+
+-- the vertical skeet shine used on boxes / checkboxes / buttons
+local function shine(parent, dark)
+    return new("UIGradient", {
+        Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(dark or 175, dark or 175, dark or 175)),
+        Rotation = 90,
         Parent = parent,
     })
 end
@@ -148,12 +147,6 @@ local function getParent()
     local ok2 = pcall(function() return CoreGui.Name end)
     if ok2 then return CoreGui end
     return Players.LocalPlayer:WaitForChild("PlayerGui")
-end
-
-local function screenSize()
-    local cam = workspace.CurrentCamera
-    if cam then return cam.ViewportSize end
-    return Vector2.new(1920, 1080)
 end
 
 local function isPress(input)
@@ -189,7 +182,6 @@ local function makeDraggable(handle, target)
     end)
 end
 
--- the 3 colour skeet gradient line
 local function gradientLine(parent)
     local line = new("Frame", {
         Size = UDim2.new(1, 0, 0, 2),
@@ -209,7 +201,6 @@ local function gradientLine(parent)
     return line
 end
 
--- right aligned strip where keybind / colour widgets live
 local function rightBox(parent)
     local c = new("Frame", {
         Size = UDim2.fromScale(1, 1),
@@ -225,6 +216,21 @@ local function rightBox(parent)
         Parent = c,
     })
     return c
+end
+
+-- popup panel: identical look for dropdowns, keybind modes and the colour picker
+local function makePanel(ctx, w, h)
+    local pop = new("Frame", {
+        Size = UDim2.fromOffset(w, h),
+        BackgroundColor3 = Theme.Panel,
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = true,
+        ZIndex = 2,
+        Parent = ctx.layer,
+    })
+    stroke(pop, Theme.Border, 1)
+    return pop
 end
 
 -- ───────────────────────── keybind widget ─────────────────────────
@@ -269,17 +275,8 @@ local function makeKeybind(container, key, mode, callback, ctx)
         end
     end
 
-    -- mode popup (right click)
-    local pop = new("Frame", {
-        Size = UDim2.fromOffset(84, #MODES * 16 + 2),
-        BackgroundColor3 = Theme.Element,
-        BorderSizePixel = 0,
-        Visible = false,
-        Active = true,
-        ZIndex = 2,
-        Parent = ctx.layer,
-    })
-    stroke(pop, Theme.Outline, 1)
+    local PW, PH = 84, #MODES * 16 + 2
+    local pop = makePanel(ctx, PW, PH)
     local modeButtons = {}
     local function refreshModes()
         for m, b in pairs(modeButtons) do
@@ -315,12 +312,7 @@ local function makeKeybind(container, key, mode, callback, ctx)
         btn.TextColor3 = Theme.Accent
     end)
     btn.MouseButton2Click:Connect(function()
-        local ap = btn.AbsolutePosition
-        local screen = ctx.screen()
-        local x = math.min(ap.X, screen.X - 84 - 4)
-        local y = ap.Y + btn.AbsoluteSize.Y + 2
-        if y + #MODES * 16 + 2 > screen.Y then y = ap.Y - (#MODES * 16 + 2) - 2 end
-        pop.Position = UDim2.fromOffset(x, y)
+        ctx.place(pop, btn, PW, PH)
         ctx.open(pop)
     end)
 
@@ -383,21 +375,12 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = container,
     })
     stroke(box, Theme.Outline, 1)
+    shine(box, 190)
 
     local W = 186
     local H = hasAlpha and 190 or 170
-    local pop = new("Frame", {
-        Size = UDim2.fromOffset(W, H),
-        BackgroundColor3 = Theme.Panel,
-        BorderSizePixel = 0,
-        Visible = false,
-        Active = true,
-        ZIndex = 2,
-        Parent = ctx.layer,
-    })
-    stroke(pop, Theme.Border, 1)
+    local pop = makePanel(ctx, W, H)
 
-    -- saturation / value square
     local sv = new("Frame", {
         Position = UDim2.fromOffset(8, 8),
         Size = UDim2.fromOffset(150, 150),
@@ -442,7 +425,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = sv,
     })
 
-    -- hue bar
     local hueBar = new("TextButton", {
         Position = UDim2.fromOffset(166, 8),
         Size = UDim2.fromOffset(12, 150),
@@ -477,7 +459,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     })
     stroke(hueCursor, Theme.Outline, 1)
 
-    -- alpha bar
     local alphaBar, alphaFill, alphaCursor
     if hasAlpha then
         alphaBar = new("TextButton", {
@@ -555,12 +536,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     end)
 
     box.MouseButton1Click:Connect(function()
-        local ap = box.AbsolutePosition
-        local screen = ctx.screen()
-        local x = math.max(4, math.min(ap.X, screen.X - W - 4))
-        local y = ap.Y + box.AbsoluteSize.Y + 4
-        if y + H > screen.Y then y = ap.Y - H - 4 end
-        pop.Position = UDim2.fromOffset(x, y)
+        ctx.place(pop, box, W, H)   -- opens right below the swatch
         ctx.open(pop)
     end)
 
@@ -581,7 +557,7 @@ function Library:CreateWindow(cfg)
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
     local TAB_W = 80
-    local HEADER = 14 -- drag strip at the top
+    local HEADER = 14
 
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
@@ -591,7 +567,6 @@ function Library:CreateWindow(cfg)
         Parent = getParent(),
     })
 
-    -- layered borders (black / grey / black) like skeet
     local outer = new("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
@@ -621,9 +596,10 @@ function Library:CreateWindow(cfg)
     })
     stroke(inner, Theme.Outline, 1)
 
-    gradientLine(inner)
+    -- the rainbow line is removed by default; pass GradientLine = true to bring it back
+    if cfg.GradientLine then gradientLine(inner) end
+    local TOP = cfg.GradientLine and 2 or 0
 
-    -- popups (dropdown lists, colour pickers, keybind modes) live above everything
     local popupLayer = new("Frame", {
         Name = "Popups",
         Size = UDim2.fromScale(1, 1),
@@ -657,9 +633,23 @@ function Library:CreateWindow(cfg)
     blocker.MouseButton1Down:Connect(closePopup)
     blocker.MouseButton2Down:Connect(closePopup)
 
-    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup, screen = screenSize }
+    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup }
 
-    -- notifications (top left)
+    -- puts a popup directly under the widget that was clicked.
+    -- only flips above the widget when there is genuinely no room below.
+    function ctx.place(pop, anchor, w, h)
+        local origin = popupLayer.AbsolutePosition
+        local ap = anchor.AbsolutePosition - origin
+        local as = anchor.AbsoluteSize
+        local scr = popupLayer.AbsoluteSize
+        local x = math.clamp(ap.X, 4, math.max(4, scr.X - w - 4))
+        local y = ap.Y + as.Y + 2
+        if y + h > scr.Y - 4 and ap.Y - h - 2 >= 4 then
+            y = ap.Y - h - 2
+        end
+        pop.Position = UDim2.fromOffset(x, y)
+    end
+
     local notifyLayer = new("Frame", {
         Name = "Notifications",
         Size = UDim2.new(0, 320, 1, -20),
@@ -674,11 +664,32 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
-    -- textured background behind the tabs (darker than the page texture)
+    -- watermark (top right)
+    local wm = new("Frame", {
+        Name = "Watermark",
+        AutomaticSize = Enum.AutomaticSize.X,
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -10, 0, 10),
+        Size = UDim2.fromOffset(0, 20),
+        BackgroundColor3 = Theme.Panel,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 200,
+        Parent = gui,
+    })
+    stroke(wm, Theme.Outline, 1)
+    gradientLine(wm).ZIndex = 201
+    local wmText = label(wm, "", {
+        AutomaticSize = Enum.AutomaticSize.X,
+        Size = UDim2.fromOffset(0, 20),
+        ZIndex = 201,
+    })
+    new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = wmText })
+
     local tabBg = new("ImageLabel", {
         Name = "TabTexture",
-        Size = UDim2.new(0, TAB_W, 1, -2),
-        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.new(0, TAB_W, 1, -TOP),
+        Position = UDim2.fromOffset(0, TOP),
         BackgroundColor3 = Theme.TabBase,
         BackgroundTransparency = 0,
         BorderSizePixel = 0,
@@ -691,10 +702,9 @@ function Library:CreateWindow(cfg)
         Parent = inner,
     })
 
-    -- holds the tab buttons (transparent so the texture shows through)
     local tabBar = new("Frame", {
-        Size = UDim2.new(0, TAB_W, 1, -2 - HEADER),
-        Position = UDim2.fromOffset(0, 2 + HEADER),
+        Size = UDim2.new(0, TAB_W, 1, -TOP - HEADER),
+        Position = UDim2.fromOffset(0, TOP + HEADER),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ZIndex = 3,
@@ -706,10 +716,9 @@ function Library:CreateWindow(cfg)
         Parent = tabBar,
     })
 
-    -- page area
     local content = new("Frame", {
-        Size = UDim2.new(1, -TAB_W, 1, -2),
-        Position = UDim2.fromOffset(TAB_W, 2),
+        Size = UDim2.new(1, -TAB_W, 1, -TOP),
+        Position = UDim2.fromOffset(TAB_W, TOP),
         BackgroundColor3 = Theme.TextureBase,
         BorderSizePixel = 0,
         ClipsDescendants = true,
@@ -733,11 +742,10 @@ function Library:CreateWindow(cfg)
         Parent = content,
     })
 
-    -- drag handle: the strip along the top (drag the window from here or from the empty tab area)
     local dragHandle = new("TextButton", {
         Name = "DragHandle",
         Size = UDim2.new(1, 0, 0, HEADER),
-        Position = UDim2.fromOffset(0, 2),
+        Position = UDim2.fromOffset(0, TOP),
         BackgroundTransparency = 1,
         Text = "",
         AutoButtonColor = false,
@@ -766,12 +774,20 @@ function Library:CreateWindow(cfg)
         end
     end)
 
-    -- ───────── window methods ─────────
     function Window:SetVisible(v) outer.Visible = v and true or false closePopup() end
     function Window:IsVisible() return outer.Visible end
     function Window:Toggle() Window:SetVisible(not outer.Visible) end
     function Window:SetBind(key) bind = key end
     function Window:Destroy() gui:Destroy() end
+
+    function Window:SetWatermark(text)
+        if text == nil or text == "" then
+            wm.Visible = false
+        else
+            wmText.Text = tostring(text)
+            wm.Visible = true
+        end
+    end
 
     function Window:Notify(text, duration)
         duration = duration or 4
@@ -825,9 +841,9 @@ function Library:CreateWindow(cfg)
     end
 
     local function serialize(kind, obj)
-        if kind == "toggle" or kind == "slider" or kind == "dropdown" or kind == "textbox" then
+        if kind == "toggle" or kind == "slider" or kind == "dropdown" or kind == "textbox" or kind == "listbox" then
             return obj:Get()
-        elseif kind == "multi" then
+        elseif kind == "multi" or kind == "multilist" then
             local t = {}
             for k in pairs(obj:Get()) do t[#t + 1] = k end
             table.sort(t)
@@ -848,7 +864,7 @@ function Library:CreateWindow(cfg)
     local function apply(kind, obj, val)
         if kind == "toggle" then obj:Set(val == true)
         elseif kind == "slider" then obj:Set(tonumber(val) or 0)
-        elseif kind == "dropdown" or kind == "multi" or kind == "textbox" then obj:Set(val)
+        elseif kind == "dropdown" or kind == "multi" or kind == "listbox" or kind == "multilist" or kind == "textbox" then obj:Set(val)
         elseif kind == "color" then obj:Set(Color3.new(val[1], val[2], val[3]), val[4])
         elseif kind == "keybind" then
             local k
@@ -931,10 +947,9 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        -- selected tab gets the same textured background as the page area
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
-            Size = UDim2.new(1, 1, 1, 0), -- 1px overlap so it joins the page area
+            Size = UDim2.new(1, 1, 1, 0),
             Position = UDim2.fromOffset(0, 0),
             BackgroundColor3 = Theme.TextureBase,
             BackgroundTransparency = 0,
@@ -1008,7 +1023,7 @@ function Library:CreateWindow(cfg)
 
         local function setSelected(on)
             page.Visible = on
-            selBox.Visible = on -- selected tab swaps to the lighter page texture
+            selBox.Visible = on
             tint(on and Theme.TabIconSelected or Theme.TabIcon)
         end
         Tab.SetSelected = setSelected
@@ -1053,7 +1068,6 @@ function Library:CreateWindow(cfg)
                 Parent = holder,
             })
 
-            -- border drawn by hand so the title can sit on the top line
             local function line(x, y, w, h, ox, oy, ow, oh)
                 return new("Frame", {
                     Position = UDim2.new(x, ox, y, oy),
@@ -1064,11 +1078,11 @@ function Library:CreateWindow(cfg)
                     Parent = body,
                 })
             end
-            line(0, 0, 0, 1, 0, 0, 1, 0)      -- left
-            line(1, 0, 0, 1, -1, 0, 1, 0)     -- right
-            line(0, 1, 1, 0, 0, -1, 0, 1)     -- bottom
-            line(0, 0, 0, 0, 0, 0, 8, 1)      -- top (left of title)
-            local topRight = line(0, 0, 1, 0, 0, 0, 0, 1) -- top (right of title)
+            line(0, 0, 0, 1, 0, 0, 1, 0)
+            line(1, 0, 0, 1, -1, 0, 1, 0)
+            line(0, 1, 1, 0, 0, -1, 0, 1)
+            line(0, 0, 0, 0, 0, 0, 8, 1)
+            local topRight = line(0, 0, 1, 0, 0, 0, 0, 1)
 
             local title = label(body, secName, {
                 Position = UDim2.fromOffset(12, -7),
@@ -1120,11 +1134,11 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
             end
-            local INDENT = 20   -- sub controls line up with the toggle text
-            local RESERVE = 46  -- indent + room on the right for [-] / colour box
+            local INDENT = 20
+            local RESERVE = 46
 
             local function reg(kind, text, obj)
-                if name == "Config" then return end -- the config tab itself is never saved
+                if name == "Config" then return end
                 register(name .. "/" .. secName .. "/" .. text, kind, obj)
             end
             local function vis(obj, frame)
@@ -1133,7 +1147,7 @@ function Library:CreateWindow(cfg)
                 return obj
             end
 
-            -- toggle (checkbox) — can carry a keybind and colour pickers
+            -- toggle
             function Section:AddToggle(text, default, callback)
                 callback = callback or function() end
                 local state = default and true or false
@@ -1155,11 +1169,7 @@ function Library:CreateWindow(cfg)
                     Parent = r,
                 })
                 stroke(check, Theme.Outline, 1)
-                new("UIGradient", {
-                    Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(175, 175, 175)),
-                    Rotation = 90,
-                    Parent = check,
-                })
+                shine(check)
                 local lbl = label(r, text, {
                     Size = UDim2.new(1, -INDENT, 1, 0),
                     Position = UDim2.fromOffset(INDENT, 0),
@@ -1192,7 +1202,7 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- slider (with - and + ends, value drawn at the end of the fill)
+            -- slider
             function Section:AddSlider(text, min, max, default, callback, fmt, step)
                 callback = callback or function() end
                 step = step or 1
@@ -1311,7 +1321,7 @@ function Library:CreateWindow(cfg)
                 return vis(obj, holder2)
             end
 
-            -- dropdown (set multi = true for a multi select box)
+            -- dropdown: same panel as the colour picker, always opens below the box
             function Section:AddDropdown(text, options, default, callback, multi)
                 callback = callback or function() end
                 options = options or {}
@@ -1325,6 +1335,7 @@ function Library:CreateWindow(cfg)
                     selectedValue = default or options[1]
                 end
 
+                local ROW, MAXROWS = 16, 10
                 local holder2 = row(34)
                 label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
@@ -1342,6 +1353,7 @@ function Library:CreateWindow(cfg)
                     Parent = holder2,
                 })
                 stroke(head, Theme.Outline, 1)
+                shine(head, 200)
                 local cur = label(head, "", {
                     Size = UDim2.new(1, -20, 1, 0),
                     Position = UDim2.fromOffset(6, 0),
@@ -1358,16 +1370,19 @@ function Library:CreateWindow(cfg)
                     ZIndex = 9,
                 })
 
-                local list = new("Frame", {
-                    Size = UDim2.fromOffset(100, #options * 16 + 2),
-                    BackgroundColor3 = Theme.Element,
+                local list = makePanel(ctx, 100, 0)
+                local scroll = new("ScrollingFrame", {
+                    Size = UDim2.fromScale(1, 1),
+                    BackgroundTransparency = 1,
                     BorderSizePixel = 0,
-                    Visible = false,
-                    Active = true,
-                    ZIndex = 2,
-                    Parent = popupLayer,
+                    ScrollBarThickness = 2,
+                    ScrollBarImageColor3 = Theme.Accent,
+                    CanvasSize = UDim2.new(),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                    Parent = list,
                 })
-                stroke(list, Theme.Outline, 1)
+                new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+                new("UIPadding", { PaddingTop = UDim.new(0, 1), PaddingBottom = UDim.new(0, 1), Parent = scroll })
 
                 local buttons = {}
                 local obj = {}
@@ -1395,15 +1410,15 @@ function Library:CreateWindow(cfg)
                     table.clear(buttons)
                     for i, opt in ipairs(options) do
                         local b = new("TextButton", {
-                            Position = UDim2.fromOffset(0, (i - 1) * 16 + 1),
-                            Size = UDim2.new(1, 0, 0, 16),
+                            LayoutOrder = i,
+                            Size = UDim2.new(1, 0, 0, ROW),
                             BackgroundTransparency = 1,
                             Text = "  " .. tostring(opt),
                             TextXAlignment = Enum.TextXAlignment.Left,
                             TextColor3 = Theme.TextDim,
                             Font = Theme.Font,
                             TextSize = Theme.TextSize,
-                            Parent = list,
+                            Parent = scroll,
                         })
                         buttons[opt] = b
                         b.MouseButton1Click:Connect(function()
@@ -1446,12 +1461,10 @@ function Library:CreateWindow(cfg)
                 end
 
                 head.MouseButton1Click:Connect(function()
-                    local ap, as = head.AbsolutePosition, head.AbsoluteSize
-                    local h = #options * 16 + 2
-                    list.Size = UDim2.fromOffset(as.X, h)
-                    local y = ap.Y + as.Y + 1 -- opens below the box
-                    if y + h > screenSize().Y then y = ap.Y - h - 1 end -- only flips up if there is no room
-                    list.Position = UDim2.fromOffset(ap.X, y)
+                    local w = head.AbsoluteSize.X
+                    local h = math.min(#options, MAXROWS) * ROW + 2
+                    list.Size = UDim2.fromOffset(w, h)
+                    ctx.place(list, head, w, h)  -- right under the box
                     openPopup(list)
                 end)
                 build()
@@ -1463,7 +1476,116 @@ function Library:CreateWindow(cfg)
                 return Section:AddDropdown(text, options, default, callback, true)
             end
 
-            -- standalone keybind: "Label                [-]"
+            -- listbox: always visible scrolling list (gamesense listbox)
+            function Section:AddListbox(text, options, default, callback, rows, multi)
+                callback = callback or function() end
+                options = options or {}
+                rows = rows or 6
+                local ROW = 16
+                local selectedValue
+                if multi then
+                    selectedValue = {}
+                    if type(default) == "table" then
+                        for _, o in ipairs(default) do selectedValue[o] = true end
+                    end
+                else
+                    selectedValue = default
+                end
+
+                local holder2 = row(15 + rows * ROW + 2)
+                label(holder2, text, {
+                    Position = UDim2.fromOffset(INDENT, 0),
+                    Size = UDim2.new(1, -RESERVE, 0, 12),
+                    ZIndex = 8,
+                })
+                local box = new("Frame", {
+                    Position = UDim2.fromOffset(INDENT, 15),
+                    Size = UDim2.new(1, -RESERVE, 0, rows * ROW + 2),
+                    BackgroundColor3 = Theme.Element,
+                    BorderSizePixel = 0,
+                    ZIndex = 8,
+                    Parent = holder2,
+                })
+                stroke(box, Theme.Outline, 1)
+                shine(box, 200)
+                local scroll = new("ScrollingFrame", {
+                    Size = UDim2.fromScale(1, 1),
+                    BackgroundTransparency = 1,
+                    BorderSizePixel = 0,
+                    ScrollBarThickness = 2,
+                    ScrollBarImageColor3 = Theme.Accent,
+                    CanvasSize = UDim2.new(),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                    ZIndex = 9,
+                    Parent = box,
+                })
+                new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+                new("UIPadding", { PaddingTop = UDim.new(0, 1), Parent = scroll })
+
+                local buttons = {}
+                local obj = {}
+                local function isOn(o)
+                    if multi then return selectedValue[o] == true end
+                    return selectedValue == o
+                end
+                local function refresh()
+                    for o, b in pairs(buttons) do
+                        b.TextColor3 = isOn(o) and Theme.Accent or Theme.TextDim
+                        b.Font = isOn(o) and Theme.FontBold or Theme.Font
+                    end
+                end
+                local function build()
+                    for _, b in pairs(buttons) do b:Destroy() end
+                    table.clear(buttons)
+                    for i, opt in ipairs(options) do
+                        local b = new("TextButton", {
+                            LayoutOrder = i,
+                            Size = UDim2.new(1, -4, 0, ROW),
+                            BackgroundTransparency = 1,
+                            Text = "  " .. tostring(opt),
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            TextColor3 = Theme.TextDim,
+                            Font = Theme.Font,
+                            TextSize = Theme.TextSize,
+                            ZIndex = 10,
+                            Parent = scroll,
+                        })
+                        buttons[opt] = b
+                        b.MouseButton1Click:Connect(function()
+                            if multi then
+                                selectedValue[opt] = (not selectedValue[opt]) or nil
+                                refresh()
+                                task.spawn(callback, selectedValue)
+                            else
+                                obj:Set(opt)
+                            end
+                        end)
+                    end
+                    refresh()
+                end
+                function obj:Set(v)
+                    if multi then
+                        selectedValue = {}
+                        if type(v) == "table" then
+                            for _, o in ipairs(v) do selectedValue[o] = true end
+                        end
+                    else
+                        selectedValue = v
+                    end
+                    refresh()
+                    task.spawn(callback, selectedValue)
+                end
+                function obj:Get() return selectedValue end
+                function obj:SetOptions(newOptions)
+                    options = newOptions or {}
+                    build()
+                end
+                build()
+                reg(multi and "multilist" or "listbox", text, obj)
+                return vis(obj, holder2)
+            end
+
+            -- standalone keybind
             function Section:AddKeybind(text, key, mode, callback)
                 local r = row(16)
                 label(r, text, {
@@ -1478,7 +1600,7 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- standalone colour picker: "Label                [###]"
+            -- standalone colour picker
             function Section:AddColorPicker(text, color, alpha, callback)
                 local r = row(16)
                 label(r, text, {
@@ -1511,6 +1633,7 @@ function Library:CreateWindow(cfg)
                     Parent = r,
                 })
                 stroke(b, Theme.Outline, 1)
+                shine(b, 200)
                 b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(46, 46, 46) end)
                 b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
@@ -1519,7 +1642,7 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- label
+            -- label (can also carry a colour picker / keybind on the right)
             function Section:AddLabel(text)
                 local r = row(14)
                 local l = label(r, text, {
@@ -1528,9 +1651,24 @@ function Library:CreateWindow(cfg)
                     TextColor3 = Theme.TextDim,
                     ZIndex = 8,
                 })
+                local rb
                 local obj = { Instance = l }
                 function obj:Set(t) l.Text = t end
                 function obj:SetColor(c) l.TextColor3 = c end
+                function obj:AddColorPicker(color, alpha, cb)
+                    rb = rb or rightBox(r)
+                    rb.ZIndex = 8
+                    local c = makeColorPicker(rb, color, alpha, cb, ctx)
+                    reg("color", text .. " colour", c)
+                    return c
+                end
+                function obj:AddKeybind(key, mode, cb)
+                    rb = rb or rightBox(r)
+                    rb.ZIndex = 8
+                    local k = makeKeybind(rb, key, mode, cb, ctx)
+                    reg("keybind", text .. " key", k)
+                    return k
+                end
                 return vis(obj, r)
             end
 
@@ -1560,6 +1698,7 @@ function Library:CreateWindow(cfg)
                     Parent = r,
                 })
                 stroke(tb, Theme.Outline, 1)
+                shine(tb, 200)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = tb })
                 tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
                 local obj = { Instance = tb }
@@ -1569,7 +1708,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- thin line between groups of controls
             function Section:AddSeparator()
                 local r = row(8)
                 new("Frame", {
@@ -1593,7 +1731,7 @@ function Library:CreateWindow(cfg)
         return Tab
     end
 
-    -- ready made config tab (uses the config icon)
+    -- ready made config tab
     function Window:AddConfigTab(opts)
         opts = opts or {}
         local tab = Window:AddTab({ Name = "Config", Icon = opts.Icon or "config" })
