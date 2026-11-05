@@ -59,6 +59,8 @@ local Theme = {
     Font       = Enum.Font.RobotoMono,
     TextSize   = 12,
     Texture    = "rbxassetid://8547666218",
+    TextureBase = Color3.fromRGB(20, 20, 20), -- colour behind the texture
+    TextureColor = Color3.fromRGB(12, 12, 12), -- tint of the texture pattern
     TextureTile = 8,           -- tile size in px, tweak if the pattern looks too big/small
     TextureTransparency = 0,   -- raise if you want the texture fainter
 }
@@ -201,19 +203,6 @@ function Library:CreateWindow(cfg)
     })
     stroke(inner, Theme.Outline, 1)
 
-    -- background texture (tiled)
-    new("ImageLabel", {
-        Name = "Texture",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Image = Theme.Texture,
-        ScaleType = Enum.ScaleType.Tile,
-        TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
-        ImageTransparency = Theme.TextureTransparency,
-        ZIndex = 1,
-        Parent = inner,
-    })
-
     gradientLine(inner)
 
     -- title bar / drag handle
@@ -252,12 +241,29 @@ function Library:CreateWindow(cfg)
     local content = new("Frame", {
         Size = UDim2.new(1, -96, 1, -32),
         Position = UDim2.fromOffset(90, 26),
-        BackgroundColor3 = Theme.Panel,
+        BackgroundColor3 = Theme.TextureBase,
         BorderSizePixel = 0,
+        ClipsDescendants = true,
         ZIndex = 3,
         Parent = inner,
     })
     stroke(content, Theme.Border, 1)
+
+    -- background texture (tiled pattern behind the pages)
+    new("ImageLabel", {
+        Name = "PageTexture",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Theme.TextureBase,
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Image = Theme.Texture,
+        ImageColor3 = Theme.TextureColor,
+        ImageTransparency = Theme.TextureTransparency,
+        ScaleType = Enum.ScaleType.Tile,
+        TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
+        ZIndex = 3,
+        Parent = content,
+    })
 
     local Window = { Tabs = {}, Gui = gui, Main = outer }
     local selected
@@ -283,6 +289,24 @@ function Library:CreateWindow(cfg)
             LayoutOrder = #Window.Tabs + 1,
             ZIndex = 4,
             Parent = tabBar,
+        })
+
+        -- selected tab gets the same textured background as the page area
+        local selBox = new("ImageLabel", {
+            Name = "SelectedTexture",
+            Size = UDim2.new(1, 1, 1, 0), -- 1px overlap so it joins the page area
+            Position = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = Theme.TextureBase,
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            Image = Theme.Texture,
+            ImageColor3 = Theme.TextureColor,
+            ImageTransparency = Theme.TextureTransparency,
+            ScaleType = Enum.ScaleType.Tile,
+            TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
+            Visible = false,
+            ZIndex = 4,
+            Parent = btn,
         })
 
         -- accent bar on the selected side
@@ -363,7 +387,8 @@ function Library:CreateWindow(cfg)
         local function setSelected(on)
             page.Visible = on
             accent.Visible = on
-            btn.BackgroundColor3 = on and Theme.Background or Theme.Panel
+            selBox.Visible = on
+            btn.BackgroundColor3 = on and Theme.TextureBase or Theme.Panel
             if img:IsA("ImageLabel") then
                 img.ImageColor3 = on and Theme.Accent or Theme.TextDim
             else
