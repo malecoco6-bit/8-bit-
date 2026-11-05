@@ -4,7 +4,7 @@
     local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
     local Window  = Library:CreateWindow({
         Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = true,
-        Rainbow = true, RainbowSpeed = 0.25,            -- animated RGB line (menu, watermark, keybind list)
+        Rainbow = false, RainbowSpeed = 0.25,           -- false = static blue/pink/yellow line, true = animated RGB
         Watermark = "gamesense | {name} | {fps} fps | {ping}ms | {time}",
         KeybindList = true,                             -- gamesense "hotkey list" overlay
     })
@@ -20,15 +20,16 @@
     Aim:AddToggle(text, default, callback)   :Set :Get :Toggle :SetText :SetTextColor :OnChanged(fn)
         toggle:AddKeybind(key, mode, callback)
         toggle:AddColorPicker(color, hasAlpha, callback)
-    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)   :Set :Get :OnChanged
+    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)   :Set :Get :OnChanged :SetText
     Aim:AddDropdown(text, options, default, callback)  :Set :Get :SetOptions :OnChanged
     Aim:AddMultiDropdown(text, options, {"A"}, callback)
     Aim:AddListbox(text, options, default, callback, rows, multi)   :Set :Get :SetOptions :OnChanged
     Aim:AddKeybind(text, key, mode, callback)          -- modes: "Always", "Hold", "Toggle", "Off"
-    Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))
+                                                       :Get :GetKey :SetKey :GetMode :SetMode
+    Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))   :Get :Set
     Aim:AddButton(text, callback)                      :SetText
     Aim:AddLabel(text)                                 :Set :SetColor :AddColorPicker :AddKeybind
-    Aim:AddInfo(text)                                  -- wrapped multi-line dim text
+    Aim:AddInfo(text)                                  :Set :SetColor   -- wrapped multi-line dim text
     Aim:AddTextbox(text, default, callback)            :Get :Set
     Aim:AddSeparator()   Aim:AddSpacer(10)
 
@@ -39,8 +40,8 @@
                                                        -- (expected can also be a function(value) -> bool, default true)
 
     ── window ───────────────────────────────────────────────────
-    Window:Notify("text", 4, optionalColor)   Window:Toggle()   Window:SetVisible(true)   Window:SelectTab("Rage")
-    Window:SetBind(key)        Window:SetTitle("text")
+    Window:Notify("text", 4, optionalColor)   Window:Toggle()   Window:SetVisible(true)   Window:IsVisible()
+    Window:SelectTab("Rage")   Window:SetBind(key)        Window:SetTitle("text")
     Window:SetWatermark("text {fps} {ping} {time} {name}") / Window:SetWatermark(nil) to hide
     Window:SetKeybindList(true)          Window:SetAccent(Color3)      Window:GetAccent()
     Window:SetRainbow(true, 0.25)        Window:GetFlag("Tab/Section/Item")   Window:Destroy()
@@ -89,22 +90,22 @@ local Theme = {
     Panel      = Color3.fromRGB(23, 23, 23),
     Section    = Color3.fromRGB(23, 23, 23),
     Element    = Color3.fromRGB(36, 36, 36),
-    CheckOff   = Color3.fromRGB(38, 38, 38),
+    CheckOff   = Color3.fromRGB(64, 64, 64),
     Border     = Color3.fromRGB(45, 45, 45),
     Frame      = Color3.fromRGB(58, 58, 58),   -- the lighter ring around the whole window
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(205, 205, 205),
     Title      = Color3.fromRGB(225, 225, 225),
     TextDim    = Color3.fromRGB(140, 140, 140),
-    Accent     = Color3.fromRGB(150, 195, 20),
+    Accent     = Color3.fromRGB(149, 184, 6),
     ScrollBar  = Color3.fromRGB(72, 72, 72),
 
     TabIcon         = Color3.fromRGB(110, 110, 110),
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    Font     = Enum.Font.Arial,
-    FontBold = Enum.Font.ArialBold,
+    Font     = Enum.Font.Verdana,
+    FontBold = Enum.Font.Verdana,   -- Verdana has no bold enum; swap for Enum.Font.ArialBold if you want real bold
     TextSize = 12,
 
     Texture = "rbxassetid://8547666218",
@@ -140,7 +141,12 @@ local function stroke(parent, color, thickness)
     })
 end
 
--- the vertical skeet shine used on boxes / checkboxes / buttons
+-- darker version of a colour (used for the bottom of accent gradients)
+local function shade(c, m)
+    return Color3.new(c.R * m, c.G * m, c.B * m)
+end
+
+-- the vertical skeet shine used on boxes / buttons
 local function shine(parent, dark)
     return new("UIGradient", {
         Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(dark or 175, dark or 175, dark or 175)),
@@ -149,7 +155,10 @@ local function shine(parent, dark)
     })
 end
 
+-- text label with gamesense's 1px black drop shadow.
+-- returns (label, shadow). props.NoShadow = true skips the shadow.
 local function label(parent, text, props)
+    props = props or {}
     local l = new("TextLabel", {
         BackgroundTransparency = 1,
         Text = text,
@@ -159,10 +168,55 @@ local function label(parent, text, props)
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = parent,
     })
-    for k, v in pairs(props or {}) do
-        l[k] = v
+    local noShadow = props.NoShadow
+    for k, v in pairs(props) do
+        if k ~= "NoShadow" then l[k] = v end
     end
-    return l
+    if noShadow then return l end
+
+    local sh = new("TextLabel", {
+        Name = "Shadow",
+        BackgroundTransparency = 1,
+        Text = l.Text,
+        TextColor3 = Color3.new(0, 0, 0),
+        Font = l.Font,
+        TextSize = l.TextSize,
+        TextXAlignment = l.TextXAlignment,
+        TextYAlignment = l.TextYAlignment,
+        TextWrapped = l.TextWrapped,
+        TextTruncate = l.TextTruncate,
+        AutomaticSize = l.AutomaticSize,
+        AnchorPoint = l.AnchorPoint,
+        Size = l.Size,
+        Position = l.Position + UDim2.fromOffset(1, 1),
+        ZIndex = math.max(l.ZIndex - 1, 1),
+        Parent = parent,
+    })
+    local function sync()
+        sh.Text = l.Text
+        sh.Size = l.Size
+        sh.Position = l.Position + UDim2.fromOffset(1, 1)
+        sh.AnchorPoint = l.AnchorPoint
+        sh.Visible = l.Visible
+        sh.TextTransparency = l.TextTransparency
+    end
+    for _, p in ipairs({ "Text", "Size", "Position", "AnchorPoint", "Visible", "TextTransparency" }) do
+        l:GetPropertyChangedSignal(p):Connect(sync)
+    end
+    return l, sh
+end
+
+-- UIPadding on a label AND its shadow
+local function padLabel(l, sh, props)
+    local a = {}
+    local b = {}
+    for k, v in pairs(props) do a[k] = v b[k] = v end
+    a.Parent = l
+    new("UIPadding", a)
+    if sh then
+        b.Parent = sh
+        new("UIPadding", b)
+    end
 end
 
 local function getParent()
@@ -218,11 +272,12 @@ local function makeDraggable(handle, target, track)
 end
 
 -- ── the line on top of the window ──
+-- blue -> purple/pink -> yellow, exactly like gamesense. 2px bar + 1px dark line under it.
 -- state = { Rainbow = bool, Speed = number }  (shared, so it can be switched at runtime)
 local DEFAULT_LINE = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),
-    ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),   -- blue
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),   -- purple / pink
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),   -- yellow
 })
 
 local function rainbowSeq(t)
@@ -242,6 +297,17 @@ local function gradientLine(parent, state)
         Parent = parent,
     })
     local grad = new("UIGradient", { Color = DEFAULT_LINE, Parent = line })
+
+    -- thin dark line right under the bar
+    new("Frame", {
+        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.new(1, 0, 0, 1),
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BorderSizePixel = 0,
+        ZIndex = 29,
+        Parent = parent,
+    })
+
     if state then
         local was = false
         local conn
@@ -649,8 +715,8 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 64
-    local TAB_H = 62
+    local TAB_W = 72
+    local TAB_H = 64
     local TAB_TOP = 26
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
@@ -710,7 +776,7 @@ function Library:CreateWindow(cfg)
     -- gradient line is on by default (like gamesense); pass GradientLine = false to remove it
     local showLine = cfg.GradientLine ~= false
     if showLine then gradientLine(inner, rb) end
-    local TOP = showLine and 2 or 0
+    local TOP = showLine and 3 or 0
 
     local popupLayer = new("Frame", {
         Name = "Popups",
@@ -791,12 +857,12 @@ function Library:CreateWindow(cfg)
     })
     stroke(wm, Theme.Outline, 1)
     gradientLine(wm, rb).ZIndex = 201
-    local wmText = label(wm, "", {
+    local wmText, wmShadow = label(wm, "", {
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
         ZIndex = 201,
     })
-    new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = wmText })
+    padLabel(wmText, wmShadow, { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
 
     local wmTemplate
     local fpsAvg, fpsAcc, fpsN = 60, 0, 0
@@ -917,19 +983,23 @@ function Library:CreateWindow(cfg)
     gradientLine(kbFrame, rb).ZIndex = 151
     local kbHead = new("TextButton", {
         Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.fromOffset(0, 2),
+        Position = UDim2.fromOffset(0, 3),
         BackgroundTransparency = 1,
-        Text = "keybinds",
-        TextColor3 = Theme.Title,
-        Font = Theme.Font,
-        TextSize = 11,
+        Text = "",
         AutoButtonColor = false,
         ZIndex = 151,
         Parent = kbFrame,
     })
+    label(kbHead, "keybinds", {
+        Size = UDim2.fromScale(1, 1),
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextColor3 = Theme.Title,
+        TextSize = 11,
+        ZIndex = 152,
+    })
     makeDraggable(kbHead, kbFrame, track)
     local kbBody = new("Frame", {
-        Position = UDim2.fromOffset(0, 20),
+        Position = UDim2.fromOffset(0, 21),
         AutomaticSize = Enum.AutomaticSize.Y,
         Size = UDim2.new(1, 0, 0, 0),
         BackgroundTransparency = 1,
@@ -990,16 +1060,15 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     stroke(tipFrame, Theme.Outline, 1)
-    local tipLabel = label(tipFrame, "", {
+    local tipLabel, tipShadow = label(tipFrame, "", {
         AutomaticSize = Enum.AutomaticSize.XY,
         Size = UDim2.fromOffset(0, 0),
         TextSize = 11,
         ZIndex = 301,
     })
-    new("UIPadding", {
+    padLabel(tipLabel, tipShadow, {
         PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6),
         PaddingTop = UDim.new(0, 3), PaddingBottom = UDim.new(0, 3),
-        Parent = tipLabel,
     })
     local tips = {}
     function ctx.addTip(frame)
@@ -1113,18 +1182,17 @@ function Library:CreateWindow(cfg)
             Size = UDim2.new(0, 2, 1, 0),
             BackgroundColor3 = color or Theme.Accent,
             BorderSizePixel = 0,
-            ZIndex = 2,
+            ZIndex = 3,
             Parent = f,
         })
-        local l = label(f, tostring(text), {
+        local l, sh = label(f, tostring(text), {
             AutomaticSize = Enum.AutomaticSize.XY,
             Size = UDim2.fromOffset(0, 0),
-            ZIndex = 2,
+            ZIndex = 3,
         })
-        new("UIPadding", {
+        padLabel(l, sh, {
             PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 8),
             PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5),
-            Parent = l,
         })
         task.delay(duration, function() f:Destroy() end)
     end
@@ -1303,8 +1371,8 @@ function Library:CreateWindow(cfg)
         local img
         if icon then
             img = new("ImageLabel", {
-                Size = UDim2.fromOffset(38, 38),
-                Position = UDim2.new(0.5, -19, 0.5, -19),
+                Size = UDim2.fromOffset(40, 40),
+                Position = UDim2.new(0.5, -20, 0.5, -20),
                 BackgroundTransparency = 1,
                 Image = icon,
                 ImageColor3 = Theme.TabIcon,
@@ -1548,16 +1616,19 @@ function Library:CreateWindow(cfg)
                     ZIndex = 7,
                     Parent = items,
                 })
+                -- gamesense checkbox: accent fading to a darker accent (or grey when off)
                 local check = new("Frame", {
                     Size = UDim2.fromOffset(8, 8),
                     Position = UDim2.fromOffset(0, 4),
-                    BackgroundColor3 = state and Theme.Accent or Theme.CheckOff,
+                    BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 8,
                     Parent = r,
                 })
                 stroke(check, Theme.Outline, 1)
-                shine(check)
+                local cg = new("UIGradient", { Rotation = 90, Parent = check })
+
+                local lblColor = Theme.Text
                 local lbl = label(r, text, {
                     Size = UDim2.new(1, -INDENT, 1, 0),
                     Position = UDim2.fromOffset(INDENT, 0),
@@ -1567,9 +1638,14 @@ function Library:CreateWindow(cfg)
                 rbox.ZIndex = 8
 
                 local function paint()
-                    check.BackgroundColor3 = state and Theme.Accent or Theme.CheckOff
+                    local c = state and Theme.Accent or Theme.CheckOff
+                    cg.Color = ColorSequence.new(c, shade(c, state and 0.55 or 0.6))
                 end
+                paint()
                 onAccent(paint)
+
+                r.MouseEnter:Connect(function() lbl.TextColor3 = Color3.new(1, 1, 1) end)
+                r.MouseLeave:Connect(function() lbl.TextColor3 = lblColor end)
 
                 local obj = {}
                 function obj:Set(v)
@@ -1582,7 +1658,7 @@ function Library:CreateWindow(cfg)
                 function obj:Toggle() obj:Set(not state) end
                 function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetText(t) lbl.Text = t end
-                function obj:SetTextColor(c) lbl.TextColor3 = c end
+                function obj:SetTextColor(c) lblColor = c lbl.TextColor3 = c end
                 function obj:AddKeybind(key, mode, cb)
                     local k = makeKeybind(rbox, key, mode, cb, ctx, text)
                     reg("keybind", text .. " key", k)
@@ -1619,8 +1695,8 @@ function Library:CreateWindow(cfg)
                 })
                 local bar = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 17),
-                    Size = UDim2.new(1, -RESERVE, 0, 5),
-                    BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+                    Size = UDim2.new(1, -RESERVE, 0, 6),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
@@ -1628,20 +1704,27 @@ function Library:CreateWindow(cfg)
                     Parent = holder2,
                 })
                 stroke(bar, Theme.Outline, 1)
+                new("UIGradient", {
+                    Color = ColorSequence.new(Color3.fromRGB(34, 34, 34), Color3.fromRGB(24, 24, 24)),
+                    Rotation = 90,
+                    Parent = bar,
+                })
                 local fill = new("Frame", {
                     Size = UDim2.new(0, 0, 1, 0),
-                    BackgroundColor3 = Theme.Accent,
+                    BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 9,
                     Parent = bar,
                 })
-                onAccent(function() fill.BackgroundColor3 = Theme.Accent end)
-                new("UIGradient", {
-                    Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 150, 150)),
-                    Rotation = 90,
-                    Parent = fill,
-                })
+                local fillGrad = new("UIGradient", { Rotation = 90, Parent = fill })
+                local function paintFill()
+                    fillGrad.Color = ColorSequence.new(Theme.Accent, shade(Theme.Accent, 0.55))
+                end
+                paintFill()
+                onAccent(paintFill)
+
                 local valueLabel = label(bar, "", {
+                    NoShadow = true,
                     AutomaticSize = Enum.AutomaticSize.X,
                     Size = UDim2.fromOffset(0, 12),
                     Font = Theme.FontBold,
@@ -1762,12 +1845,12 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                label(head, "▼", {
+                label(head, "▾", {
                     Size = UDim2.fromOffset(14, 18),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     TextColor3 = Theme.TextDim,
-                    TextSize = 8,
+                    TextSize = 10,
                     ZIndex = 9,
                 })
 
@@ -1822,6 +1905,10 @@ function Library:CreateWindow(cfg)
                             Parent = scroll,
                         })
                         buttons[opt] = b
+                        b.MouseEnter:Connect(function() b.TextColor3 = Color3.new(1, 1, 1) end)
+                        b.MouseLeave:Connect(function()
+                            b.TextColor3 = isOn(opt) and Color3.new(1, 1, 1) or Theme.TextDim
+                        end)
                         b.MouseButton1Click:Connect(function()
                             if multi then
                                 selectedValue[opt] = (not selectedValue[opt]) or nil
@@ -1957,6 +2044,12 @@ function Library:CreateWindow(cfg)
                             Parent = scroll,
                         })
                         buttons[opt] = b
+                        b.MouseEnter:Connect(function()
+                            if not isOn(opt) then b.TextColor3 = Color3.new(1, 1, 1) end
+                        end)
+                        b.MouseLeave:Connect(function()
+                            b.TextColor3 = isOn(opt) and Theme.Accent or Theme.TextDim
+                        end)
                         b.MouseButton1Click:Connect(function()
                             if multi then
                                 selectedValue[opt] = (not selectedValue[opt]) or nil
@@ -2033,21 +2126,23 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.new(1, -RESERVE, 1, 0),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
-                    Text = text,
-                    TextColor3 = Theme.Text,
-                    Font = Theme.Font,
-                    TextSize = Theme.TextSize,
+                    Text = "",
                     AutoButtonColor = false,
                     ZIndex = 8,
                     Parent = r,
                 })
                 stroke(b, Theme.Outline, 1)
                 shine(b, 200)
+                local bl = label(b, text, {
+                    Size = UDim2.fromScale(1, 1),
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    ZIndex = 9,
+                })
                 b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(46, 46, 46) end)
                 b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
                 local obj = { Instance = b }
-                function obj:SetText(t) b.Text = t end
+                function obj:SetText(t) bl.Text = t end
                 return vis(obj, r)
             end
 
