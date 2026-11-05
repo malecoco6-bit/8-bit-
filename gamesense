@@ -104,8 +104,8 @@ local Theme = {
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    Font     = Enum.Font.Verdana,
-    FontBold = Enum.Font.Verdana,   -- Verdana has no bold enum; swap for Enum.Font.ArialBold if you want real bold
+    Font     = Enum.Font.Arial,
+    FontBold = Enum.Font.Arial,
     TextSize = 12,
 
     Texture = "rbxassetid://8547666218",
