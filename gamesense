@@ -2,44 +2,68 @@
     gamesense / skeet style UI library for Roblox
 
     local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
+    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift })
 
-    local Window = Library:CreateWindow({ Bind = Enum.KeyCode.RightShift })
+    ── tabs (icons) ─────────────────────────────────────────────
+    Window:AddTab({ Name = "Rage" })                  -- icons come from Library.Icons in order
+    Window:AddTab({ Name = "X", Icon = "gear" })      -- by name: headshot, crosshair, visuals, gear, karambit, config
+    Window:AddTab({ Name = "X", Icon = 3 })           -- by number
+    Window:AddTab({ Name = "X", Icon = "rbxassetid://123" })
+    Window:AddConfigTab()                              -- ready made config tab (config icon)
 
-    local Rage = Window:AddTab({ Name = "Rage" })               -- icon comes from Library.Icons (in order)
-    local Aim  = Rage:AddSection("Aimbot", "Left")              -- "Left" or "Right"
+    ── sections / elements ──────────────────────────────────────
+    local Aim = Tab:AddSection("Aimbot", "Left")       -- "Left" or "Right"
+    Aim:AddToggle(text, default, callback)             -- :Set :Get :SetText :SetTextColor :SetVisible
+        toggle:AddKeybind(key, mode, callback)         -- the [-] on the right
+        toggle:AddColorPicker(color, hasAlpha, callback)
+    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)
+    Aim:AddDropdown(text, options, default, callback)  -- :Set :Get :SetOptions
+    Aim:AddDropdown(text, options, {"A"}, callback, true)  -- multi select  (or AddMultiDropdown)
+    Aim:AddKeybind(text, key, mode, callback)          -- modes: "Always", "Hold", "Toggle", "Off"
+    Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))
+    Aim:AddButton(text, callback)                      -- :SetText
+    Aim:AddLabel(text)                                 -- :Set :SetColor
+    Aim:AddTextbox(text, default, callback)            -- :Get :Set
+    Aim:AddSeparator()   Aim:AddSpacer(10)
+    (every element also has :SetVisible(bool))
 
-    local en = Aim:AddToggle("Enabled", false, function(v) end)
-    en:AddKeybind(nil, "Hold", function(active) end)            -- the little [-] on the right
-    en:AddColorPicker(Color3.fromRGB(255, 0, 0), false)         -- colour box (false = no alpha)
-    en:AddColorPicker(Color3.fromRGB(255, 0, 0), true)          -- colour box with alpha bar
-
-    Aim:AddDropdown("Hitbox", { "Head", "Chest" }, "Head", function(v) end)
-    Aim:AddDropdown("Multi-point", { "Head", "Chest", "Legs" }, {}, function(set) end, true) -- multi select
-    Aim:AddSlider("Minimum damage", 0, 100, 10, function(v) end)
-    Aim:AddSlider("Hit chance", 0, 100, 90, function(v) end, "%")
-    Aim:AddSlider("Aim speed", 0, 10, 0, function(v) end, function(v) return v == 0 and "Instant" or v end)
-    Aim:AddKeybind("Force lethal shot", nil, "Hold", function(active) end)
-    Aim:AddColorPicker("Circle colour", Color3.fromRGB(255, 255, 255), true, function(c, a) end)
-    Aim:AddButton("Reset", function() end)
-    Aim:AddLabel("hello")
-    Aim:AddTextbox("Name", "", function(t) end)
+    ── window ───────────────────────────────────────────────────
+    Window:Notify("text", 4)        Window:Toggle()        Window:SetVisible(true)
+    Window:SelectTab("Rage")        Window:SetBind(Enum.KeyCode.Insert)
+    Window:SaveConfig("name")       Window:LoadConfig("name")      Window:DeleteConfig("name")
+    Window:ListConfigs()            Window:ExportConfig()          Window:ImportConfig(jsonString)
+    Window:Destroy()
 ]]
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui          = game:GetService("CoreGui")
+local HttpService      = game:GetService("HttpService")
 
 local Library = {}
+Library.ConfigFolder = "gamesense_configs"
 
 -- ───────────────────────── icons ─────────────────────────
+-- 1 headshot, 2 crosshair, 3 visuals (sun), 4 gear, 5 karambit, 6 config
 -- Tabs automatically use these in order (1st tab = 1st icon, ...).
--- Pick one manually: AddTab({ Name = "Misc", Icon = 3 })  -- uses ICONS[3]
--- or pass your own id: AddTab({ Name = "X", Icon = "rbxassetid://123" })
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
+local ICON_NAMES = {
+    headshot = 1, rage = 1,
+    crosshair = 2, legit = 2,
+    visuals = 3, sun = 3,
+    gear = 4, settings = 4, misc = 4,
+    karambit = 5, knife = 5, skins = 5,
+    config = 6, save = 6,
+}
+Library.IconNames = ICON_NAMES
+
 local function resolveIcon(icon)
-    if type(icon) == "number" and icon <= #ICONS then
+    if type(icon) == "string" and ICON_NAMES[icon:lower()] then
+        icon = ICON_NAMES[icon:lower()]
+    end
+    if type(icon) == "number" and ICONS[icon] then
         icon = ICONS[icon]
     end
     if icon == nil then return nil end
@@ -124,6 +148,12 @@ local function getParent()
     local ok2 = pcall(function() return CoreGui.Name end)
     if ok2 then return CoreGui end
     return Players.LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local function screenSize()
+    local cam = workspace.CurrentCamera
+    if cam then return cam.ViewportSize end
+    return Vector2.new(1920, 1080)
 end
 
 local function isPress(input)
@@ -286,7 +316,11 @@ local function makeKeybind(container, key, mode, callback, ctx)
     end)
     btn.MouseButton2Click:Connect(function()
         local ap = btn.AbsolutePosition
-        pop.Position = UDim2.fromOffset(ap.X, ap.Y + btn.AbsoluteSize.Y + 2)
+        local screen = ctx.screen()
+        local x = math.min(ap.X, screen.X - 84 - 4)
+        local y = ap.Y + btn.AbsoluteSize.Y + 2
+        if y + #MODES * 16 + 2 > screen.Y then y = ap.Y - (#MODES * 16 + 2) - 2 end
+        pop.Position = UDim2.fromOffset(x, y)
         ctx.open(pop)
     end)
 
@@ -322,11 +356,13 @@ local function makeKeybind(container, key, mode, callback, ctx)
         end
     end)
 
-    local obj = {}
+    local obj = { Instance = btn }
     function obj:Get() return active end
     function obj:GetKey() return key end
     function obj:SetKey(k) key = k btn.Text = keyText(key) end
+    function obj:GetMode() return mode end
     function obj:SetMode(m) mode = m refreshModes() end
+    function obj:SetVisible(v) btn.Visible = v end
     return obj
 end
 
@@ -520,21 +556,22 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
 
     box.MouseButton1Click:Connect(function()
         local ap = box.AbsolutePosition
-        local screen = ctx.gui.AbsoluteSize
-        local x = math.min(ap.X, screen.X - W - 4)
+        local screen = ctx.screen()
+        local x = math.max(4, math.min(ap.X, screen.X - W - 4))
         local y = ap.Y + box.AbsoluteSize.Y + 4
         if y + H > screen.Y then y = ap.Y - H - 4 end
         pop.Position = UDim2.fromOffset(x, y)
         ctx.open(pop)
     end)
 
-    local obj = {}
+    local obj = { Instance = box }
     function obj:Get() return color, alpha end
     function obj:Set(c, a)
         h, s, v = c:ToHSV()
         if a then alpha = a end
         refresh(true)
     end
+    function obj:SetVisible(vis) box.Visible = vis end
     return obj
 end
 
@@ -544,6 +581,7 @@ function Library:CreateWindow(cfg)
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
     local TAB_W = 80
+    local HEADER = 14 -- drag strip at the top
 
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
@@ -619,7 +657,22 @@ function Library:CreateWindow(cfg)
     blocker.MouseButton1Down:Connect(closePopup)
     blocker.MouseButton2Down:Connect(closePopup)
 
-    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup }
+    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup, screen = screenSize }
+
+    -- notifications (top left)
+    local notifyLayer = new("Frame", {
+        Name = "Notifications",
+        Size = UDim2.new(0, 320, 1, -20),
+        Position = UDim2.fromOffset(10, 10),
+        BackgroundTransparency = 1,
+        ZIndex = 200,
+        Parent = gui,
+    })
+    new("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 4),
+        Parent = notifyLayer,
+    })
 
     -- textured background behind the tabs (darker than the page texture)
     local tabBg = new("ImageLabel", {
@@ -637,12 +690,11 @@ function Library:CreateWindow(cfg)
         ZIndex = 2,
         Parent = inner,
     })
-    makeDraggable(tabBg, outer)
 
     -- holds the tab buttons (transparent so the texture shows through)
     local tabBar = new("Frame", {
-        Size = UDim2.new(0, TAB_W, 1, -2),
-        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.new(0, TAB_W, 1, -2 - HEADER),
+        Position = UDim2.fromOffset(0, 2 + HEADER),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ZIndex = 3,
@@ -681,7 +733,30 @@ function Library:CreateWindow(cfg)
         Parent = content,
     })
 
-    local Window = { Tabs = {}, Gui = gui, Main = outer }
+    -- drag handle: the strip along the top (drag the window from here or from the empty tab area)
+    local dragHandle = new("TextButton", {
+        Name = "DragHandle",
+        Size = UDim2.new(1, 0, 0, HEADER),
+        Position = UDim2.fromOffset(0, 2),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 20,
+        Parent = inner,
+    })
+    makeDraggable(dragHandle, outer)
+    makeDraggable(tabBg, outer)
+    if cfg.Title and cfg.Title ~= "" then
+        label(dragHandle, cfg.Title, {
+            Position = UDim2.fromOffset(8, 0),
+            Size = UDim2.new(1, -16, 1, 0),
+            TextColor3 = Theme.TextDim,
+            TextSize = 11,
+            ZIndex = 21,
+        })
+    end
+
+    local Window = { Tabs = {}, Gui = gui, Main = outer, Flags = {} }
     local selected
 
     UserInputService.InputBegan:Connect(function(input, gp)
@@ -691,6 +766,155 @@ function Library:CreateWindow(cfg)
         end
     end)
 
+    -- ───────── window methods ─────────
+    function Window:SetVisible(v) outer.Visible = v and true or false closePopup() end
+    function Window:IsVisible() return outer.Visible end
+    function Window:Toggle() Window:SetVisible(not outer.Visible) end
+    function Window:SetBind(key) bind = key end
+    function Window:Destroy() gui:Destroy() end
+
+    function Window:Notify(text, duration)
+        duration = duration or 4
+        local f = new("Frame", {
+            AutomaticSize = Enum.AutomaticSize.XY,
+            Size = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = Theme.Panel,
+            BorderSizePixel = 0,
+            Parent = notifyLayer,
+        })
+        stroke(f, Theme.Outline, 1)
+        new("Frame", {
+            Size = UDim2.new(0, 2, 1, 0),
+            BackgroundColor3 = Theme.Accent,
+            BorderSizePixel = 0,
+            ZIndex = 2,
+            Parent = f,
+        })
+        local l = label(f, tostring(text), {
+            AutomaticSize = Enum.AutomaticSize.XY,
+            Size = UDim2.fromOffset(0, 0),
+            ZIndex = 2,
+        })
+        new("UIPadding", {
+            PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5),
+            Parent = l,
+        })
+        task.delay(duration, function() f:Destroy() end)
+    end
+
+    function Window:SelectTab(which)
+        for i, t in ipairs(Window.Tabs) do
+            if i == which or t.Name == which then
+                t.Select()
+                return true
+            end
+        end
+        return false
+    end
+
+    -- ───────── flags + configs ─────────
+    local Flags = Window.Flags
+    local function register(path, kind, obj)
+        local p, n = path, 1
+        while Flags[p] do
+            n += 1
+            p = path .. " (" .. n .. ")"
+        end
+        Flags[p] = { Kind = kind, Obj = obj }
+    end
+
+    local function serialize(kind, obj)
+        if kind == "toggle" or kind == "slider" or kind == "dropdown" or kind == "textbox" then
+            return obj:Get()
+        elseif kind == "multi" then
+            local t = {}
+            for k in pairs(obj:Get()) do t[#t + 1] = k end
+            table.sort(t)
+            return t
+        elseif kind == "color" then
+            local c, a = obj:Get()
+            return { c.R, c.G, c.B, a }
+        elseif kind == "keybind" then
+            local k = obj:GetKey()
+            return {
+                Key = k and k.Name or nil,
+                Type = k and ((k.EnumType == Enum.KeyCode) and "KeyCode" or "UserInputType") or nil,
+                Mode = obj:GetMode(),
+            }
+        end
+    end
+
+    local function apply(kind, obj, val)
+        if kind == "toggle" then obj:Set(val == true)
+        elseif kind == "slider" then obj:Set(tonumber(val) or 0)
+        elseif kind == "dropdown" or kind == "multi" or kind == "textbox" then obj:Set(val)
+        elseif kind == "color" then obj:Set(Color3.new(val[1], val[2], val[3]), val[4])
+        elseif kind == "keybind" then
+            local k
+            if val.Key then
+                local enum = (val.Type == "KeyCode") and Enum.KeyCode or Enum.UserInputType
+                k = enum[val.Key]
+            end
+            obj:SetKey(k)
+            if val.Mode then obj:SetMode(val.Mode) end
+        end
+    end
+
+    function Window:ExportConfig()
+        local data = {}
+        for path, f in pairs(Flags) do
+            local ok, v = pcall(serialize, f.Kind, f.Obj)
+            if ok and v ~= nil then data[path] = v end
+        end
+        return HttpService:JSONEncode(data)
+    end
+
+    function Window:ImportConfig(json)
+        local ok, data = pcall(function() return HttpService:JSONDecode(json) end)
+        if not ok or type(data) ~= "table" then return false, "invalid config" end
+        for path, val in pairs(data) do
+            local f = Flags[path]
+            if f then pcall(apply, f.Kind, f.Obj, val) end
+        end
+        return true
+    end
+
+    local function cleanName(n) return (tostring(n):gsub("[^%w _%-]", "")) end
+    local function hasFiles() return writefile and readfile and isfile and true or false end
+    local function cfgPath(n) return Library.ConfigFolder .. "/" .. cleanName(n) .. ".json" end
+
+    function Window:SaveConfig(name)
+        if not hasFiles() then return false, "your executor has no file functions" end
+        if isfolder and makefolder and not isfolder(Library.ConfigFolder) then makefolder(Library.ConfigFolder) end
+        writefile(cfgPath(name), Window:ExportConfig())
+        return true
+    end
+    function Window:LoadConfig(name)
+        if not hasFiles() then return false, "your executor has no file functions" end
+        if not isfile(cfgPath(name)) then return false, "config not found" end
+        return Window:ImportConfig(readfile(cfgPath(name)))
+    end
+    function Window:DeleteConfig(name)
+        if delfile and isfile and isfile(cfgPath(name)) then
+            delfile(cfgPath(name))
+            return true
+        end
+        return false, "could not delete"
+    end
+    function Window:ListConfigs()
+        local out = {}
+        if listfiles and isfolder and isfolder(Library.ConfigFolder) then
+            for _, p in ipairs(listfiles(Library.ConfigFolder)) do
+                local n = p:match("([^/\\]+)%.json$")
+                if n then out[#out + 1] = n end
+            end
+        end
+        table.sort(out)
+        return out
+    end
+
+    -- ───────── tabs ─────────
     function Window:AddTab(opts)
         if type(opts) == "string" then opts = { Name = opts } end
         local name = opts.Name or "Tab"
@@ -758,8 +982,8 @@ function Library:CreateWindow(cfg)
 
         local function makeColumn(xScale, xOff)
             local col = new("ScrollingFrame", {
-                Size = UDim2.new(0.5, -34, 1, -24),
-                Position = UDim2.new(xScale, xOff, 0, 12),
+                Size = UDim2.new(0.5, -34, 1, -30),
+                Position = UDim2.new(xScale, xOff, 0, 18),
                 BackgroundTransparency = 1,
                 BorderSizePixel = 0,
                 ScrollBarThickness = 2,
@@ -780,7 +1004,7 @@ function Library:CreateWindow(cfg)
         local left  = makeColumn(0, 24)
         local right = makeColumn(0.5, 10)
 
-        local Tab = { Page = page }
+        local Tab = { Page = page, Name = name }
 
         local function setSelected(on)
             page.Visible = on
@@ -789,12 +1013,14 @@ function Library:CreateWindow(cfg)
         end
         Tab.SetSelected = setSelected
 
-        btn.MouseButton1Click:Connect(function()
+        function Tab.Select()
             if selected and selected ~= Tab then selected.SetSelected(false) end
             selected = Tab
             setSelected(true)
             closePopup()
-        end)
+        end
+
+        btn.MouseButton1Click:Connect(Tab.Select)
         btn.MouseEnter:Connect(function()
             if selected ~= Tab then tint(Theme.TabIconHover) end
         end)
@@ -897,6 +1123,16 @@ function Library:CreateWindow(cfg)
             local INDENT = 20   -- sub controls line up with the toggle text
             local RESERVE = 46  -- indent + room on the right for [-] / colour box
 
+            local function reg(kind, text, obj)
+                if name == "Config" then return end -- the config tab itself is never saved
+                register(name .. "/" .. secName .. "/" .. text, kind, obj)
+            end
+            local function vis(obj, frame)
+                obj.Row = frame
+                function obj:SetVisible(v) frame.Visible = v and true or false end
+                return obj
+            end
+
             -- toggle (checkbox) — can carry a keybind and colour pickers
             function Section:AddToggle(text, default, callback)
                 callback = callback or function() end
@@ -924,7 +1160,7 @@ function Library:CreateWindow(cfg)
                     Rotation = 90,
                     Parent = check,
                 })
-                label(r, text, {
+                local lbl = label(r, text, {
                     Size = UDim2.new(1, -INDENT, 1, 0),
                     Position = UDim2.fromOffset(INDENT, 0),
                     ZIndex = 8,
@@ -939,10 +1175,21 @@ function Library:CreateWindow(cfg)
                     task.spawn(callback, state)
                 end
                 function obj:Get() return state end
-                function obj:AddKeybind(key, mode, cb) return makeKeybind(rb, key, mode, cb, ctx) end
-                function obj:AddColorPicker(color, alpha, cb) return makeColorPicker(rb, color, alpha, cb, ctx) end
+                function obj:SetText(t) lbl.Text = t end
+                function obj:SetTextColor(c) lbl.TextColor3 = c end
+                function obj:AddKeybind(key, mode, cb)
+                    local k = makeKeybind(rb, key, mode, cb, ctx)
+                    reg("keybind", text .. " key", k)
+                    return k
+                end
+                function obj:AddColorPicker(color, alpha, cb)
+                    local c = makeColorPicker(rb, color, alpha, cb, ctx)
+                    reg("color", text .. " colour", c)
+                    return c
+                end
                 r.MouseButton1Click:Connect(function() obj:Set(not state) end)
-                return obj
+                reg("toggle", text, obj)
+                return vis(obj, r)
             end
 
             -- slider (with - and + ends, value drawn at the end of the fill)
@@ -958,7 +1205,7 @@ function Library:CreateWindow(cfg)
                 local value = snap(default or min)
 
                 local holder2 = row(30)
-                label(holder2, text, {
+                local lbl = label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
                     ZIndex = 8,
@@ -1037,6 +1284,7 @@ function Library:CreateWindow(cfg)
                     task.spawn(callback, value)
                 end
                 function obj:Get() return value end
+                function obj:SetText(t) lbl.Text = t end
                 render()
 
                 minus.MouseButton1Click:Connect(function() obj:Set(value - step) end)
@@ -1059,12 +1307,14 @@ function Library:CreateWindow(cfg)
                 UserInputService.InputEnded:Connect(function(i)
                     if isPress(i) then dragging = false end
                 end)
-                return obj
+                reg("slider", text, obj)
+                return vis(obj, holder2)
             end
 
             -- dropdown (set multi = true for a multi select box)
             function Section:AddDropdown(text, options, default, callback, multi)
                 callback = callback or function() end
+                options = options or {}
                 local selectedValue
                 if multi then
                     selectedValue = {}
@@ -1133,13 +1383,43 @@ function Library:CreateWindow(cfg)
                         end
                         cur.Text = (#t > 0) and table.concat(t, ", ") or "-"
                     else
-                        cur.Text = tostring(selectedValue)
+                        cur.Text = (selectedValue ~= nil) and tostring(selectedValue) or "-"
                     end
                     for o, b in pairs(buttons) do
                         b.TextColor3 = isOn(o) and Color3.new(1, 1, 1) or Theme.TextDim
                         b.Font = isOn(o) and Theme.FontBold or Theme.Font
                     end
                 end
+                local function build()
+                    for _, b in pairs(buttons) do b:Destroy() end
+                    table.clear(buttons)
+                    for i, opt in ipairs(options) do
+                        local b = new("TextButton", {
+                            Position = UDim2.fromOffset(0, (i - 1) * 16 + 1),
+                            Size = UDim2.new(1, 0, 0, 16),
+                            BackgroundTransparency = 1,
+                            Text = "  " .. tostring(opt),
+                            TextXAlignment = Enum.TextXAlignment.Left,
+                            TextColor3 = Theme.TextDim,
+                            Font = Theme.Font,
+                            TextSize = Theme.TextSize,
+                            Parent = list,
+                        })
+                        buttons[opt] = b
+                        b.MouseButton1Click:Connect(function()
+                            if multi then
+                                selectedValue[opt] = (not selectedValue[opt]) or nil
+                                refresh()
+                                task.spawn(callback, selectedValue)
+                            else
+                                obj:Set(opt)
+                                closePopup()
+                            end
+                        end)
+                    end
+                    refresh()
+                end
+
                 function obj:Set(v)
                     if multi then
                         selectedValue = {}
@@ -1153,43 +1433,34 @@ function Library:CreateWindow(cfg)
                     task.spawn(callback, selectedValue)
                 end
                 function obj:Get() return selectedValue end
-
-                for i, opt in ipairs(options) do
-                    local b = new("TextButton", {
-                        Position = UDim2.fromOffset(0, (i - 1) * 16 + 1),
-                        Size = UDim2.new(1, 0, 0, 16),
-                        BackgroundTransparency = 1,
-                        Text = "  " .. tostring(opt),
-                        TextXAlignment = Enum.TextXAlignment.Left,
-                        TextColor3 = Theme.TextDim,
-                        Font = Theme.Font,
-                        TextSize = Theme.TextSize,
-                        Parent = list,
-                    })
-                    buttons[opt] = b
-                    b.MouseButton1Click:Connect(function()
-                        if multi then
-                            selectedValue[opt] = (not selectedValue[opt]) or nil
-                            refresh()
-                            task.spawn(callback, selectedValue)
-                        else
-                            obj:Set(opt)
-                            closePopup()
+                function obj:SetOptions(newOptions)
+                    options = newOptions or {}
+                    if multi then
+                        for k in pairs(selectedValue) do
+                            if not table.find(options, k) then selectedValue[k] = nil end
                         end
-                    end)
+                    elseif not table.find(options, selectedValue) then
+                        selectedValue = options[1]
+                    end
+                    build()
                 end
 
                 head.MouseButton1Click:Connect(function()
                     local ap, as = head.AbsolutePosition, head.AbsoluteSize
                     local h = #options * 16 + 2
                     list.Size = UDim2.fromOffset(as.X, h)
-                    local y = ap.Y + as.Y + 1
-                    if y + h > gui.AbsoluteSize.Y then y = ap.Y - h - 1 end
+                    local y = ap.Y + as.Y + 1 -- opens below the box
+                    if y + h > screenSize().Y then y = ap.Y - h - 1 end -- only flips up if there is no room
                     list.Position = UDim2.fromOffset(ap.X, y)
                     openPopup(list)
                 end)
-                refresh()
-                return obj
+                build()
+                reg(multi and "multi" or "dropdown", text, obj)
+                return vis(obj, holder2)
+            end
+
+            function Section:AddMultiDropdown(text, options, default, callback)
+                return Section:AddDropdown(text, options, default, callback, true)
             end
 
             -- standalone keybind: "Label                [-]"
@@ -1202,7 +1473,9 @@ function Library:CreateWindow(cfg)
                 })
                 local rb = rightBox(r)
                 rb.ZIndex = 8
-                return makeKeybind(rb, key, mode, callback, ctx)
+                local obj = makeKeybind(rb, key, mode, callback, ctx)
+                reg("keybind", text, obj)
+                return vis(obj, r)
             end
 
             -- standalone colour picker: "Label                [###]"
@@ -1215,7 +1488,9 @@ function Library:CreateWindow(cfg)
                 })
                 local rb = rightBox(r)
                 rb.ZIndex = 8
-                return makeColorPicker(rb, color, alpha, callback, ctx)
+                local obj = makeColorPicker(rb, color, alpha, callback, ctx)
+                reg("color", text, obj)
+                return vis(obj, r)
             end
 
             -- button
@@ -1239,7 +1514,9 @@ function Library:CreateWindow(cfg)
                 b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(46, 46, 46) end)
                 b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
-                return b
+                local obj = { Instance = b }
+                function obj:SetText(t) b.Text = t end
+                return vis(obj, r)
             end
 
             -- label
@@ -1251,9 +1528,10 @@ function Library:CreateWindow(cfg)
                     TextColor3 = Theme.TextDim,
                     ZIndex = 8,
                 })
-                local obj = {}
+                local obj = { Instance = l }
                 function obj:Set(t) l.Text = t end
-                return obj
+                function obj:SetColor(c) l.TextColor3 = c end
+                return vis(obj, r)
             end
 
             -- textbox
@@ -1284,7 +1562,29 @@ function Library:CreateWindow(cfg)
                 stroke(tb, Theme.Outline, 1)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = tb })
                 tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
-                return tb
+                local obj = { Instance = tb }
+                function obj:Get() return tb.Text end
+                function obj:Set(t) tb.Text = tostring(t or "") task.spawn(callback, tb.Text) end
+                reg("textbox", text, obj)
+                return vis(obj, r)
+            end
+
+            -- thin line between groups of controls
+            function Section:AddSeparator()
+                local r = row(8)
+                new("Frame", {
+                    Position = UDim2.new(0, 0, 0.5, 0),
+                    Size = UDim2.new(1, 0, 0, 1),
+                    BackgroundColor3 = Theme.Border,
+                    BorderSizePixel = 0,
+                    ZIndex = 8,
+                    Parent = r,
+                })
+                return vis({}, r)
+            end
+
+            function Section:AddSpacer(h)
+                return vis({}, row(h or 8))
             end
 
             return Section
@@ -1293,7 +1593,58 @@ function Library:CreateWindow(cfg)
         return Tab
     end
 
-    function Window:Destroy() gui:Destroy() end
+    -- ready made config tab (uses the config icon)
+    function Window:AddConfigTab(opts)
+        opts = opts or {}
+        local tab = Window:AddTab({ Name = "Config", Icon = opts.Icon or "config" })
+
+        local presets = tab:AddSection("Presets", "Left")
+        local nameBox
+        local list = presets:AddDropdown("Config list", Window:ListConfigs(), nil, function(v)
+            if nameBox and v then nameBox:Set(v) end
+        end)
+        nameBox = presets:AddTextbox("Config name", "default")
+        local function refreshList() list:SetOptions(Window:ListConfigs()) end
+        local function result(ok, msg, good)
+            Window:Notify(ok and good or ("Failed: " .. tostring(msg)))
+        end
+        presets:AddButton("Save", function()
+            local n = nameBox:Get()
+            local ok, err = Window:SaveConfig(n)
+            result(ok, err, "Saved config " .. n)
+            refreshList()
+        end)
+        presets:AddButton("Load", function()
+            local n = nameBox:Get()
+            local ok, err = Window:LoadConfig(n)
+            result(ok, err, "Loaded config " .. n)
+        end)
+        presets:AddButton("Delete", function()
+            local n = nameBox:Get()
+            local ok, err = Window:DeleteConfig(n)
+            result(ok, err, "Deleted config " .. n)
+            refreshList()
+        end)
+        presets:AddButton("Refresh list", refreshList)
+
+        local share = tab:AddSection("Share", "Right")
+        share:AddButton("Export to clipboard", function()
+            if setclipboard then
+                setclipboard(Window:ExportConfig())
+                Window:Notify("Config copied to clipboard")
+            else
+                Window:Notify("Failed: your executor has no setclipboard")
+            end
+        end)
+        local importBox = share:AddTextbox("Import string", "")
+        share:AddButton("Import", function()
+            local ok, err = Window:ImportConfig(importBox:Get())
+            result(ok, err, "Imported config")
+        end)
+        share:AddSeparator()
+        share:AddButton("Unload UI", function() Window:Destroy() end)
+        return tab
+    end
 
     return Window
 end
