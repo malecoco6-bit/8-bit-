@@ -1845,7 +1845,7 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                label(head, "▾", {
+                label(head, "▼", {
                     Size = UDim2.fromOffset(14, 18),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
