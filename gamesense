@@ -1,53 +1,3 @@
---[[
-    gamesense / skeet style UI library for Roblox
-
-    local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
-    local Window  = Library:CreateWindow({
-        Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = true,
-        Rainbow = false, RainbowSpeed = 0.25,           -- false = static blue/pink/yellow line, true = animated RGB
-        Watermark = "gamesense | {name} | {fps} fps | {ping}ms | {time}",
-        KeybindList = true,                             -- gamesense "hotkey list" overlay
-    })
-
-    ── tabs ─────────────────────────────────────────────────────
-    Window:AddTab({ Name = "Rage" })  Window:AddTab({ Name = "X", Icon = "gear" })  Window:AddConfigTab()
-
-    ── sections / elements ──────────────────────────────────────
-    local Aim = Tab:AddSection("Aimbot", "Left")            -- auto height
-    local Esp = Tab:AddSection("Player ESP", "Left", 260)   -- fixed height (px) + inner scrollbar like gamesense
-    Section:SetVisible(bool)
-
-    Aim:AddToggle(text, default, callback)   :Set :Get :Toggle :SetText :SetTextColor :OnChanged(fn)
-        toggle:AddKeybind(key, mode, callback)
-        toggle:AddColorPicker(color, hasAlpha, callback)
-    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)   :Set :Get :OnChanged :SetText
-    Aim:AddDropdown(text, options, default, callback)  :Set :Get :SetOptions :OnChanged
-    Aim:AddMultiDropdown(text, options, {"A"}, callback)
-    Aim:AddListbox(text, options, default, callback, rows, multi)   :Set :Get :SetOptions :OnChanged
-    Aim:AddKeybind(text, key, mode, callback)          -- modes: "Always", "Hold", "Toggle", "Off"
-                                                       :Get :GetKey :SetKey :GetMode :SetMode
-    Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))   :Get :Set
-    Aim:AddButton(text, callback)                      :SetText
-    Aim:AddLabel(text)                                 :Set :SetColor :AddColorPicker :AddKeybind
-    Aim:AddInfo(text)                                  :Set :SetColor   -- wrapped multi-line dim text
-    Aim:AddTextbox(text, default, callback)            :Get :Set
-    Aim:AddSeparator()   Aim:AddSpacer(10)
-
-    every element also has:
-        :SetVisible(bool)
-        :SetTooltip("text")                            -- hover tooltip
-        :DependsOn(otherElement, expected)             -- only shown while other:Get() == expected
-                                                       -- (expected can also be a function(value) -> bool, default true)
-
-    ── window ───────────────────────────────────────────────────
-    Window:Notify("text", 4, optionalColor)   Window:Toggle()   Window:SetVisible(true)   Window:IsVisible()
-    Window:SelectTab("Rage")   Window:SetBind(key)        Window:SetTitle("text")
-    Window:SetWatermark("text {fps} {ping} {time} {name}") / Window:SetWatermark(nil) to hide
-    Window:SetKeybindList(true)          Window:SetAccent(Color3)      Window:GetAccent()
-    Window:SetRainbow(true, 0.25)        Window:GetFlag("Tab/Section/Item")   Window:Destroy()
-    Window:SaveConfig / LoadConfig / DeleteConfig / ListConfigs / ExportConfig / ImportConfig
-]]
-
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui          = game:GetService("CoreGui")
@@ -141,12 +91,10 @@ local function stroke(parent, color, thickness)
     })
 end
 
--- darker version of a colour (used for the bottom of accent gradients)
 local function shade(c, m)
     return Color3.new(c.R * m, c.G * m, c.B * m)
 end
 
--- the vertical skeet shine used on boxes / buttons
 local function shine(parent, dark)
     return new("UIGradient", {
         Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(dark or 175, dark or 175, dark or 175)),
@@ -155,8 +103,6 @@ local function shine(parent, dark)
     })
 end
 
--- text label with gamesense's 1px black drop shadow.
--- returns (label, shadow). props.NoShadow = true skips the shadow.
 local function label(parent, text, props)
     props = props or {}
     local l = new("TextLabel", {
@@ -206,7 +152,6 @@ local function label(parent, text, props)
     return l, sh
 end
 
--- UIPadding on a label AND its shadow
 local function padLabel(l, sh, props)
     local a = {}
     local b = {}
@@ -237,7 +182,6 @@ local function isMove(input)
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
--- tiny signal used by OnChanged / DependsOn
 local function emitter()
     local listeners = {}
     local function connect(fn) listeners[#listeners + 1] = fn end
@@ -271,24 +215,14 @@ local function makeDraggable(handle, target, track)
     end))
 end
 
--- ── the line on top of the window ──
--- blue -> purple/pink -> yellow, exactly like gamesense. 2px bar + 1px dark line under it.
--- state = { Rainbow = bool, Speed = number }  (shared, so it can be switched at runtime)
+-- ── the static gradient line on top of the window ──
 local DEFAULT_LINE = ColorSequence.new({
     ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),   -- blue
     ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),   -- purple / pink
     ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),   -- yellow
 })
 
-local function rainbowSeq(t)
-    local keys = {}
-    for i = 0, 6 do
-        keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((t - i / 6) % 1, 0.75, 1))
-    end
-    return ColorSequence.new(keys)
-end
-
-local function gradientLine(parent, state)
+local function gradientLine(parent)
     local line = new("Frame", {
         Size = UDim2.new(1, 0, 0, 2),
         BackgroundColor3 = Color3.new(1, 1, 1),
@@ -296,9 +230,8 @@ local function gradientLine(parent, state)
         ZIndex = 30,
         Parent = parent,
     })
-    local grad = new("UIGradient", { Color = DEFAULT_LINE, Parent = line })
+    new("UIGradient", { Color = DEFAULT_LINE, Parent = line })
 
-    -- thin dark line right under the bar
     new("Frame", {
         Position = UDim2.fromOffset(0, 2),
         Size = UDim2.new(1, 0, 0, 1),
@@ -307,24 +240,6 @@ local function gradientLine(parent, state)
         ZIndex = 29,
         Parent = parent,
     })
-
-    if state then
-        local was = false
-        local conn
-        conn = RunService.Heartbeat:Connect(function()
-            if not line:IsDescendantOf(game) then
-                conn:Disconnect()
-                return
-            end
-            if state.Rainbow then
-                was = true
-                grad.Color = rainbowSeq((os.clock() * (state.Speed or 0.25)) % 1)
-            elseif was then
-                was = false
-                grad.Color = DEFAULT_LINE
-            end
-        end)
-    end
     return line
 end
 
@@ -345,7 +260,6 @@ local function rightBox(parent)
     return c
 end
 
--- popup panel: identical look for dropdowns, keybind modes and the colour picker
 local function makePanel(ctx, w, h)
     local pop = new("Frame", {
         Size = UDim2.fromOffset(w, h),
@@ -360,7 +274,6 @@ local function makePanel(ctx, w, h)
     return pop
 end
 
--- ───────────────────────── keybind widget ─────────────────────────
 local MODES = {
     { "Always on", "Always" },
     { "On hotkey", "Hold" },
@@ -499,7 +412,6 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
     return obj
 end
 
--- ───────────────────────── colour picker widget ─────────────────────────
 local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     callback = callback or function() end
     local color = default or Color3.fromRGB(255, 255, 255)
@@ -677,7 +589,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     end))
 
     box.MouseButton1Click:Connect(function()
-        ctx.place(pop, box, W, H)   -- opens right below the swatch
+        ctx.place(pop, box, W, H)
         ctx.open(pop)
     end)
 
@@ -692,7 +604,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     return obj
 end
 
--- is `inst` actually on screen under the mouse? (walks visibility + clipping)
 local function hoverable(inst, root, m)
     local p = inst
     while p and p ~= root do
@@ -721,12 +632,6 @@ function Library:CreateWindow(cfg)
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
-    -- rainbow state shared by every gradient line of this window
-    local rb = {
-        Rainbow = (cfg.Rainbow == true) or (cfg.GradientLine == "Rainbow"),
-        Speed = cfg.RainbowSpeed or 0.25,
-    }
-
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
         ResetOnSpawn = false,
@@ -735,15 +640,12 @@ function Library:CreateWindow(cfg)
         Parent = getParent(),
     })
 
-    -- every window-level connection goes through here so Destroy() cleans up everything
     local conns = {}
     local function track(c) conns[#conns + 1] = c return c end
 
-    -- accent colour: anything tinted with Theme.Accent registers a repaint function here
     local accentUpdaters = {}
     local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
 
-    -- 3 stacked frames = the black / grey / black ring around the window
     local outer = new("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
@@ -773,10 +675,8 @@ function Library:CreateWindow(cfg)
     })
     stroke(inner, Theme.Outline, 1)
 
-    -- gradient line is on by default (like gamesense); pass GradientLine = false to remove it
-    local showLine = cfg.GradientLine ~= false
-    if showLine then gradientLine(inner, rb) end
-    local TOP = showLine and 3 or 0
+    gradientLine(inner)
+    local TOP = 3
 
     local popupLayer = new("Frame", {
         Name = "Popups",
@@ -813,8 +713,6 @@ function Library:CreateWindow(cfg)
 
     local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup, track = track }
 
-    -- puts a popup directly under the widget that was clicked.
-    -- only flips above the widget when there is genuinely no room below.
     function ctx.place(pop, anchor, w, h)
         local origin = popupLayer.AbsolutePosition
         local ap = anchor.AbsolutePosition - origin
@@ -842,7 +740,6 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
-    -- watermark (top right). supports {fps} {ping} {time} {name}
     local wm = new("Frame", {
         Name = "Watermark",
         AutomaticSize = Enum.AutomaticSize.X,
@@ -856,7 +753,7 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     stroke(wm, Theme.Outline, 1)
-    gradientLine(wm, rb).ZIndex = 201
+    gradientLine(wm).ZIndex = 201
     local wmText, wmShadow = label(wm, "", {
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
@@ -885,7 +782,6 @@ function Library:CreateWindow(cfg)
         end))
     end
 
-    -- left tab strip background (darker than the page)
     local tabBg = new("ImageLabel", {
         Name = "TabTexture",
         Size = UDim2.new(0, TAB_W, 1, -TOP),
@@ -902,7 +798,6 @@ function Library:CreateWindow(cfg)
         Parent = inner,
     })
 
-    -- page area. its own border doubles as the divider between the tab strip and the page
     local content = new("Frame", {
         Size = UDim2.new(1, -TAB_W, 1, -TOP),
         Position = UDim2.fromOffset(TAB_W, TOP),
@@ -929,8 +824,6 @@ function Library:CreateWindow(cfg)
         Parent = content,
     })
 
-    -- tab bar sits ABOVE the page (ZIndex 6) so the selected tab can paint over the divider
-    -- and merge into the page, exactly like gamesense
     local tabBar = new("Frame", {
         Size = UDim2.new(0, TAB_W, 1, -TOP - TAB_TOP),
         Position = UDim2.fromOffset(0, TOP + TAB_TOP),
@@ -965,7 +858,6 @@ function Library:CreateWindow(cfg)
         ZIndex = 21,
     })
 
-    -- ───────── keybind list (gamesense "hotkey list") ─────────
     local kbEntries = {}
     local kbEnabled = cfg.KeybindList == true
     local kbFrame = new("Frame", {
@@ -980,7 +872,7 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     stroke(kbFrame, Theme.Outline, 1)
-    gradientLine(kbFrame, rb).ZIndex = 151
+    gradientLine(kbFrame).ZIndex = 151
     local kbHead = new("TextButton", {
         Size = UDim2.new(1, 0, 0, 18),
         Position = UDim2.fromOffset(0, 3),
@@ -1049,7 +941,6 @@ function Library:CreateWindow(cfg)
         kbEntries[#kbEntries + 1] = { Name = name, Obj = obj }
     end
 
-    -- ───────── tooltips ─────────
     local tipFrame = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.XY,
         Size = UDim2.fromOffset(0, 0),
@@ -1078,7 +969,6 @@ function Library:CreateWindow(cfg)
     end
     local tipFor, tipSince = nil, 0
 
-    -- one heartbeat drives fps counter, watermark refresh and tooltips
     track(RunService.Heartbeat:Connect(function(dt)
         fpsAcc += dt
         fpsN += 1
@@ -1157,11 +1047,6 @@ function Library:CreateWindow(cfg)
         refreshKeybinds()
     end
 
-    function Window:SetRainbow(on, speed)
-        rb.Rainbow = on and true or false
-        if speed then rb.Speed = speed end
-    end
-
     function Window:SetAccent(c)
         Theme.Accent = c
         for _, fn in ipairs(accentUpdaters) do pcall(fn) end
@@ -1207,7 +1092,6 @@ function Library:CreateWindow(cfg)
         return false
     end
 
-    -- ───────── flags + configs ─────────
     local Flags = Window.Flags
     local function register(path, kind, obj)
         local p, n = path, 1
@@ -1255,7 +1139,6 @@ function Library:CreateWindow(cfg)
         end
     end
 
-    -- read the current value of any registered element:  Window:GetFlag("Rage/Aimbot/Enabled")
     function Window:GetFlag(path)
         local f = Flags[path]
         if not f then return nil end
@@ -1316,7 +1199,6 @@ function Library:CreateWindow(cfg)
         return out
     end
 
-    -- ───────── tabs ─────────
     function Window:AddTab(opts)
         if type(opts) == "string" then opts = { Name = opts } end
         local name = opts.Name or "Tab"
@@ -1333,8 +1215,6 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        -- selected look: same textured background as the page, 1px lines on top/bottom,
-        -- and it reaches 1px past the strip so it erases the divider and flows into the page
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
             Size = UDim2.new(1, 1, 1, 0),
@@ -1453,8 +1333,6 @@ function Library:CreateWindow(cfg)
             setSelected(true)
         end
 
-        -- ───────── sections ─────────
-        -- height (optional): fixed pixel height. content then scrolls inside the box with a thin grey scrollbar
         function Tab:AddSection(secName, side, height)
             local parent = (side == "Right") and right or left
             local fixed = type(height) == "number"
@@ -1522,7 +1400,7 @@ function Library:CreateWindow(cfg)
                 })
             else
                 items = new("Frame", {
-                    Size = UDim2.fromScale(1, 1),
+                    Size = UDim2.new(1, 0, 1, 0),
                     BackgroundTransparency = 1,
                     ZIndex = 6,
                     Parent = body,
@@ -1569,12 +1447,10 @@ function Library:CreateWindow(cfg)
             local RESERVE = 46
 
             local function reg(kind, text, obj)
-                -- the Config tab is not saved, except its "Menu" section (accent, rainbow, ...)
                 if name == "Config" and secName ~= "Menu" then return end
                 register(name .. "/" .. secName .. "/" .. text, kind, obj)
             end
 
-            -- shared extras every element gets
             local function vis(obj, frame)
                 obj.Row = frame
                 function obj:SetVisible(v) frame.Visible = v and true or false end
@@ -1586,7 +1462,6 @@ function Library:CreateWindow(cfg)
                     return obj
                 end
 
-                -- show this element only while `other:Get() == expected`
                 function obj:DependsOn(other, expected)
                     if expected == nil then expected = true end
                     local function check()
@@ -1602,7 +1477,6 @@ function Library:CreateWindow(cfg)
                 return obj
             end
 
-            -- toggle
             function Section:AddToggle(text, default, callback)
                 callback = callback or function() end
                 local state = default and true or false
@@ -1616,7 +1490,6 @@ function Library:CreateWindow(cfg)
                     ZIndex = 7,
                     Parent = items,
                 })
-                -- gamesense checkbox: accent fading to a darker accent (or grey when off)
                 local check = new("Frame", {
                     Size = UDim2.fromOffset(8, 8),
                     Position = UDim2.fromOffset(0, 4),
@@ -1674,7 +1547,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- slider
             function Section:AddSlider(text, min, max, default, callback, fmt, step)
                 callback = callback or function() end
                 step = step or 1
@@ -1804,7 +1676,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, holder2)
             end
 
-            -- dropdown: same panel as the colour picker, always opens below the box
             function Section:AddDropdown(text, options, default, callback, multi)
                 callback = callback or function() end
                 options = options or {}
@@ -1955,7 +1826,7 @@ function Library:CreateWindow(cfg)
                     local w = head.AbsoluteSize.X
                     local h = math.min(#options, MAXROWS) * ROW + 2
                     list.Size = UDim2.fromOffset(w, h)
-                    ctx.place(list, head, w, h)  -- right under the box
+                    ctx.place(list, head, w, h)
                     openPopup(list)
                 end)
                 build()
@@ -1967,7 +1838,6 @@ function Library:CreateWindow(cfg)
                 return Section:AddDropdown(text, options, default, callback, true)
             end
 
-            -- listbox: always visible scrolling list (gamesense listbox)
             function Section:AddListbox(text, options, default, callback, rows, multi)
                 callback = callback or function() end
                 options = options or {}
@@ -2087,7 +1957,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, holder2)
             end
 
-            -- standalone keybind
             function Section:AddKeybind(text, key, mode, callback)
                 local r = row(16)
                 label(r, text, {
@@ -2102,7 +1971,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- standalone colour picker
             function Section:AddColorPicker(text, color, alpha, callback)
                 local r = row(16)
                 label(r, text, {
@@ -2117,7 +1985,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- button
             function Section:AddButton(text, callback)
                 callback = callback or function() end
                 local r = row(20)
@@ -2146,7 +2013,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- label (can also carry a colour picker / keybind on the right)
             function Section:AddLabel(text)
                 local r = row(14)
                 local l = label(r, text, {
@@ -2176,7 +2042,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- wrapped multi-line info text
             function Section:AddInfo(text)
                 local r = new("Frame", {
                     AutomaticSize = Enum.AutomaticSize.Y,
@@ -2201,7 +2066,6 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- textbox
             function Section:AddTextbox(text, default, callback)
                 callback = callback or function() end
                 local r = row(36)
@@ -2260,7 +2124,6 @@ function Library:CreateWindow(cfg)
         return Tab
     end
 
-    -- ready made config tab (presets, sharing, and a "Menu" section for accent / rainbow / overlays)
     function Window:AddConfigTab(opts)
         opts = opts or {}
         local tab = Window:AddTab({ Name = "Config", Icon = opts.Icon or "config" })
@@ -2296,10 +2159,6 @@ function Library:CreateWindow(cfg)
 
         local menu = tab:AddSection("Menu", "Left")
         menu:AddLabel("Menu accent"):AddColorPicker(Theme.Accent, false, function(c) Window:SetAccent(c) end)
-        local rbToggle = menu:AddToggle("Rainbow line", rb.Rainbow, function(v) Window:SetRainbow(v) end)
-        local rbSpeed = menu:AddSlider("Rainbow speed", 1, 100, math.floor(rb.Speed * 100 + 0.5),
-            function(v) rb.Speed = v / 100 end, "%")
-        rbSpeed:DependsOn(rbToggle, true)
         menu:AddToggle("Keybind list", kbEnabled, function(v) Window:SetKeybindList(v) end)
         menu:AddToggle("Watermark", wmTemplate ~= nil, function(v)
             Window:SetWatermark(v and DEFAULT_WATERMARK or nil)
@@ -2311,7 +2170,7 @@ function Library:CreateWindow(cfg)
             end
         end
 
-        local share = tab:AddSection("Share", "Right")
+        local share = tab:AddSection("Right", "Right")
         share:AddButton("Export to clipboard", function()
             if setclipboard then
                 setclipboard(Window:ExportConfig())
@@ -2330,7 +2189,6 @@ function Library:CreateWindow(cfg)
         return tab
     end
 
-    -- optional startup config
     if cfg.Watermark then
         Window:SetWatermark(cfg.Watermark == true and DEFAULT_WATERMARK or cfg.Watermark)
     end
