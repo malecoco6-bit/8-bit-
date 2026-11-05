@@ -2,13 +2,14 @@
     gamesense / skeet style UI library for Roblox
 
     local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
-    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = false })
+    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = true })
 
     ── tabs ─────────────────────────────────────────────────────
     Window:AddTab({ Name = "Rage" })  Window:AddTab({ Name = "X", Icon = "gear" })  Window:AddConfigTab()
 
     ── sections / elements ──────────────────────────────────────
-    local Aim = Tab:AddSection("Aimbot", "Left")
+    local Aim = Tab:AddSection("Aimbot", "Left")            -- auto height
+    local Esp = Tab:AddSection("Player ESP", "Left", 260)   -- fixed height (px) + inner scrollbar like gamesense
     Aim:AddToggle(text, default, callback)             -- :Set :Get :SetText :SetTextColor :SetVisible
         toggle:AddKeybind(key, mode, callback)
         toggle:AddColorPicker(color, hasAlpha, callback)
@@ -71,14 +72,17 @@ local Theme = {
     Section    = Color3.fromRGB(23, 23, 23),
     Element    = Color3.fromRGB(36, 36, 36),
     CheckOff   = Color3.fromRGB(38, 38, 38),
-    Border     = Color3.fromRGB(40, 40, 40),
+    Border     = Color3.fromRGB(45, 45, 45),
+    Frame      = Color3.fromRGB(58, 58, 58),   -- the lighter ring around the whole window
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(205, 205, 205),
+    Title      = Color3.fromRGB(225, 225, 225),
     TextDim    = Color3.fromRGB(140, 140, 140),
     Accent     = Color3.fromRGB(150, 195, 20),
+    ScrollBar  = Color3.fromRGB(72, 72, 72),
 
-    TabIcon         = Color3.fromRGB(125, 125, 125),
-    TabIconHover    = Color3.fromRGB(190, 190, 190),
+    TabIcon         = Color3.fromRGB(110, 110, 110),
+    TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
     Font     = Enum.Font.Arial,
@@ -187,7 +191,7 @@ local function gradientLine(parent)
         Size = UDim2.new(1, 0, 0, 2),
         BackgroundColor3 = Color3.new(1, 1, 1),
         BorderSizePixel = 0,
-        ZIndex = 5,
+        ZIndex = 30,
         Parent = parent,
     })
     new("UIGradient", {
@@ -556,8 +560,11 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 80
-    local HEADER = 14
+    local TAB_W = 64
+    local TAB_H = 62
+    local TAB_TOP = 26
+    local hasTitle = cfg.Title and cfg.Title ~= ""
+    local HEADER = hasTitle and 14 or 10
 
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
@@ -567,6 +574,7 @@ function Library:CreateWindow(cfg)
         Parent = getParent(),
     })
 
+    -- 3 stacked frames = the black / grey / black ring around the window
     local outer = new("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
@@ -584,7 +592,7 @@ function Library:CreateWindow(cfg)
         BorderSizePixel = 0,
         Parent = outer,
     })
-    stroke(mid, Theme.Border, 1)
+    stroke(mid, Theme.Frame, 1)
 
     local inner = new("Frame", {
         Size = UDim2.new(1, -2, 1, -2),
@@ -596,9 +604,10 @@ function Library:CreateWindow(cfg)
     })
     stroke(inner, Theme.Outline, 1)
 
-    -- the rainbow line is removed by default; pass GradientLine = true to bring it back
-    if cfg.GradientLine then gradientLine(inner) end
-    local TOP = cfg.GradientLine and 2 or 0
+    -- gradient line is on by default (like gamesense); pass GradientLine = false to remove it
+    local showLine = cfg.GradientLine ~= false
+    if showLine then gradientLine(inner) end
+    local TOP = showLine and 2 or 0
 
     local popupLayer = new("Frame", {
         Name = "Popups",
@@ -686,6 +695,7 @@ function Library:CreateWindow(cfg)
     })
     new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = wmText })
 
+    -- left tab strip background (darker than the page)
     local tabBg = new("ImageLabel", {
         Name = "TabTexture",
         Size = UDim2.new(0, TAB_W, 1, -TOP),
@@ -702,20 +712,7 @@ function Library:CreateWindow(cfg)
         Parent = inner,
     })
 
-    local tabBar = new("Frame", {
-        Size = UDim2.new(0, TAB_W, 1, -TOP - HEADER),
-        Position = UDim2.fromOffset(0, TOP + HEADER),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 3,
-        Parent = inner,
-    })
-    new("UIListLayout", {
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 0),
-        Parent = tabBar,
-    })
-
+    -- page area. its own border doubles as the divider between the tab strip and the page
     local content = new("Frame", {
         Size = UDim2.new(1, -TAB_W, 1, -TOP),
         Position = UDim2.fromOffset(TAB_W, TOP),
@@ -742,6 +739,22 @@ function Library:CreateWindow(cfg)
         Parent = content,
     })
 
+    -- tab bar sits ABOVE the page (ZIndex 6) so the selected tab can paint over the divider
+    -- and merge into the page, exactly like gamesense
+    local tabBar = new("Frame", {
+        Size = UDim2.new(0, TAB_W, 1, -TOP - TAB_TOP),
+        Position = UDim2.fromOffset(0, TOP + TAB_TOP),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 6,
+        Parent = inner,
+    })
+    new("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 0),
+        Parent = tabBar,
+    })
+
     local dragHandle = new("TextButton", {
         Name = "DragHandle",
         Size = UDim2.new(1, 0, 0, HEADER),
@@ -754,7 +767,7 @@ function Library:CreateWindow(cfg)
     })
     makeDraggable(dragHandle, outer)
     makeDraggable(tabBg, outer)
-    if cfg.Title and cfg.Title ~= "" then
+    if hasTitle then
         label(dragHandle, cfg.Title, {
             Position = UDim2.fromOffset(8, 0),
             Size = UDim2.new(1, -16, 1, 0),
@@ -937,7 +950,7 @@ function Library:CreateWindow(cfg)
         local icon = resolveIcon(opts.Icon ~= nil and opts.Icon or ICONS[#Window.Tabs + 1])
 
         local btn = new("TextButton", {
-            Size = UDim2.new(1, 0, 0, 66),
+            Size = UDim2.new(1, 0, 0, TAB_H),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
             Text = "",
@@ -947,6 +960,8 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
+        -- selected look: same textured background as the page, 1px lines on top/bottom,
+        -- and it reaches 1px past the strip so it erases the divider and flows into the page
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
             Size = UDim2.new(1, 1, 1, 0),
@@ -963,16 +978,32 @@ function Library:CreateWindow(cfg)
             ZIndex = 4,
             Parent = btn,
         })
+        new("Frame", {
+            Size = UDim2.new(1, 0, 0, 1),
+            Position = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = Theme.Border,
+            BorderSizePixel = 0,
+            ZIndex = 5,
+            Parent = selBox,
+        })
+        new("Frame", {
+            Size = UDim2.new(1, 0, 0, 1),
+            Position = UDim2.new(0, 0, 1, -1),
+            BackgroundColor3 = Theme.Border,
+            BorderSizePixel = 0,
+            ZIndex = 5,
+            Parent = selBox,
+        })
 
         local img
         if icon then
             img = new("ImageLabel", {
-                Size = UDim2.fromOffset(40, 40),
-                Position = UDim2.new(0.5, -20, 0.5, -20),
+                Size = UDim2.fromOffset(38, 38),
+                Position = UDim2.new(0.5, -19, 0.5, -19),
                 BackgroundTransparency = 1,
                 Image = icon,
                 ImageColor3 = Theme.TabIcon,
-                ZIndex = 5,
+                ZIndex = 6,
                 Parent = btn,
             })
         else
@@ -980,7 +1011,7 @@ function Library:CreateWindow(cfg)
                 Size = UDim2.fromScale(1, 1),
                 TextXAlignment = Enum.TextXAlignment.Center,
                 TextColor3 = Theme.TabIcon,
-                ZIndex = 5,
+                ZIndex = 6,
             })
         end
         local function tint(c)
@@ -997,12 +1028,12 @@ function Library:CreateWindow(cfg)
 
         local function makeColumn(xScale, xOff)
             local col = new("ScrollingFrame", {
-                Size = UDim2.new(0.5, -34, 1, -30),
-                Position = UDim2.new(xScale, xOff, 0, 18),
+                Size = UDim2.new(0.5, -34, 1, -24),
+                Position = UDim2.new(xScale, xOff, 0, 12),
                 BackgroundTransparency = 1,
                 BorderSizePixel = 0,
                 ScrollBarThickness = 2,
-                ScrollBarImageColor3 = Theme.Accent,
+                ScrollBarImageColor3 = Theme.ScrollBar,
                 CanvasSize = UDim2.new(),
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 ZIndex = 4,
@@ -1050,8 +1081,10 @@ function Library:CreateWindow(cfg)
         end
 
         -- ───────── sections ─────────
-        function Tab:AddSection(secName, side)
+        -- height (optional): fixed pixel height. content then scrolls inside the box with a thin grey scrollbar
+        function Tab:AddSection(secName, side, height)
             local parent = (side == "Right") and right or left
+            local fixed = type(height) == "number"
 
             local holder = new("Frame", {
                 Size = UDim2.new(1, 0, 0, 40),
@@ -1088,6 +1121,7 @@ function Library:CreateWindow(cfg)
                 Position = UDim2.fromOffset(12, -7),
                 Size = UDim2.fromOffset(0, 14),
                 AutomaticSize = Enum.AutomaticSize.X,
+                TextColor3 = Theme.Title,
                 ZIndex = 7,
             })
             local function placeTitle()
@@ -1098,24 +1132,46 @@ function Library:CreateWindow(cfg)
             title:GetPropertyChangedSignal("TextBounds"):Connect(placeTitle)
             placeTitle()
 
-            local items = new("Frame", {
-                Size = UDim2.fromScale(1, 1),
-                BackgroundTransparency = 1,
-                ZIndex = 6,
-                Parent = body,
-            })
+            local items
+            if fixed then
+                items = new("ScrollingFrame", {
+                    Position = UDim2.fromOffset(0, 2),
+                    Size = UDim2.new(1, -4, 1, -4),
+                    BackgroundTransparency = 1,
+                    BorderSizePixel = 0,
+                    ScrollBarThickness = 3,
+                    ScrollBarImageColor3 = Theme.ScrollBar,
+                    ScrollBarImageTransparency = 0,
+                    CanvasSize = UDim2.new(),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                    ZIndex = 6,
+                    Parent = body,
+                })
+            else
+                items = new("Frame", {
+                    Size = UDim2.fromScale(1, 1),
+                    BackgroundTransparency = 1,
+                    ZIndex = 6,
+                    Parent = body,
+                })
+            end
             new("UIPadding", {
-                PaddingTop = UDim.new(0, 14), PaddingBottom = UDim.new(0, 10),
-                PaddingLeft = UDim.new(0, 18), PaddingRight = UDim.new(0, 18),
+                PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 8),
+                PaddingLeft = UDim.new(0, 22), PaddingRight = UDim.new(0, fixed and 18 or 22),
                 Parent = items,
             })
             local layout = new("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 4),
+                Padding = UDim.new(0, 2),
                 Parent = items,
             })
             local function resize()
-                local h = layout.AbsoluteContentSize.Y + 14 + 10
+                if fixed then
+                    body.Size = UDim2.new(1, 0, 0, height)
+                    holder.Size = UDim2.new(1, 0, 0, height + 7)
+                    return
+                end
+                local h = layout.AbsoluteContentSize.Y + 12 + 8
                 body.Size = UDim2.new(1, 0, 0, h)
                 holder.Size = UDim2.new(1, 0, 0, h + 7)
             end
@@ -1134,7 +1190,7 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
             end
-            local INDENT = 20
+            local INDENT = 19
             local RESERVE = 46
 
             local function reg(kind, text, obj)
@@ -1375,8 +1431,8 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
                     BorderSizePixel = 0,
-                    ScrollBarThickness = 2,
-                    ScrollBarImageColor3 = Theme.Accent,
+                    ScrollBarThickness = 3,
+                    ScrollBarImageColor3 = Theme.ScrollBar,
                     CanvasSize = UDim2.new(),
                     AutomaticCanvasSize = Enum.AutomaticSize.Y,
                     Parent = list,
@@ -1512,8 +1568,8 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
                     BorderSizePixel = 0,
-                    ScrollBarThickness = 2,
-                    ScrollBarImageColor3 = Theme.Accent,
+                    ScrollBarThickness = 3,
+                    ScrollBarImageColor3 = Theme.ScrollBar,
                     CanvasSize = UDim2.new(),
                     AutomaticCanvasSize = Enum.AutomaticSize.Y,
                     ZIndex = 9,
