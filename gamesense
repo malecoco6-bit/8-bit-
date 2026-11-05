@@ -1099,12 +1099,12 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                label(head, "v", {
+                label(head, "▼", {
                     Size = UDim2.fromOffset(14, 18),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     TextColor3 = Theme.TextDim,
-                    TextSize = 10,
+                    TextSize = 8,
                     ZIndex = 9,
                 })
 
