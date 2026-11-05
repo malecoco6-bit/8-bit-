@@ -2,7 +2,12 @@
     gamesense / skeet style UI library for Roblox
 
     local Library = loadstring(game:HttpGet("YOUR_RAW_LINK"))()
-    local Window  = Library:CreateWindow({ Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = true })
+    local Window  = Library:CreateWindow({
+        Title = "", Bind = Enum.KeyCode.RightShift, GradientLine = true,
+        Rainbow = true, RainbowSpeed = 0.25,            -- animated RGB line (menu, watermark, keybind list)
+        Watermark = "gamesense | {name} | {fps} fps | {ping}ms | {time}",
+        KeybindList = true,                             -- gamesense "hotkey list" overlay
+    })
 
     ── tabs ─────────────────────────────────────────────────────
     Window:AddTab({ Name = "Rage" })  Window:AddTab({ Name = "X", Icon = "gear" })  Window:AddConfigTab()
@@ -10,30 +15,43 @@
     ── sections / elements ──────────────────────────────────────
     local Aim = Tab:AddSection("Aimbot", "Left")            -- auto height
     local Esp = Tab:AddSection("Player ESP", "Left", 260)   -- fixed height (px) + inner scrollbar like gamesense
-    Aim:AddToggle(text, default, callback)             -- :Set :Get :SetText :SetTextColor :SetVisible
+    Section:SetVisible(bool)
+
+    Aim:AddToggle(text, default, callback)   :Set :Get :Toggle :SetText :SetTextColor :OnChanged(fn)
         toggle:AddKeybind(key, mode, callback)
         toggle:AddColorPicker(color, hasAlpha, callback)
-    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)
-    Aim:AddDropdown(text, options, default, callback)  -- :Set :Get :SetOptions
+    Aim:AddSlider(text, min, max, default, callback, suffixOrFormatFn, step)   :Set :Get :OnChanged
+    Aim:AddDropdown(text, options, default, callback)  :Set :Get :SetOptions :OnChanged
     Aim:AddMultiDropdown(text, options, {"A"}, callback)
-    Aim:AddListbox(text, options, default, callback, rows, multi)   -- :Set :Get :SetOptions
+    Aim:AddListbox(text, options, default, callback, rows, multi)   :Set :Get :SetOptions :OnChanged
     Aim:AddKeybind(text, key, mode, callback)          -- modes: "Always", "Hold", "Toggle", "Off"
     Aim:AddColorPicker(text, color, hasAlpha, callback(color, alpha))
-    Aim:AddButton(text, callback)                      -- :SetText
-    Aim:AddLabel(text)                                 -- :Set :SetColor :AddColorPicker :AddKeybind
-    Aim:AddTextbox(text, default, callback)            -- :Get :Set
+    Aim:AddButton(text, callback)                      :SetText
+    Aim:AddLabel(text)                                 :Set :SetColor :AddColorPicker :AddKeybind
+    Aim:AddInfo(text)                                  -- wrapped multi-line dim text
+    Aim:AddTextbox(text, default, callback)            :Get :Set
     Aim:AddSeparator()   Aim:AddSpacer(10)
 
+    every element also has:
+        :SetVisible(bool)
+        :SetTooltip("text")                            -- hover tooltip
+        :DependsOn(otherElement, expected)             -- only shown while other:Get() == expected
+                                                       -- (expected can also be a function(value) -> bool, default true)
+
     ── window ───────────────────────────────────────────────────
-    Window:Notify("text", 4)   Window:Toggle()   Window:SetVisible(true)   Window:SelectTab("Rage")
-    Window:SetBind(key)        Window:SetWatermark("text") / Window:SetWatermark(nil) to hide
-    Window:SaveConfig / LoadConfig / DeleteConfig / ListConfigs / ExportConfig / ImportConfig / Destroy
+    Window:Notify("text", 4, optionalColor)   Window:Toggle()   Window:SetVisible(true)   Window:SelectTab("Rage")
+    Window:SetBind(key)        Window:SetTitle("text")
+    Window:SetWatermark("text {fps} {ping} {time} {name}") / Window:SetWatermark(nil) to hide
+    Window:SetKeybindList(true)          Window:SetAccent(Color3)      Window:GetAccent()
+    Window:SetRainbow(true, 0.25)        Window:GetFlag("Tab/Section/Item")   Window:Destroy()
+    Window:SaveConfig / LoadConfig / DeleteConfig / ListConfigs / ExportConfig / ImportConfig
 ]]
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui          = game:GetService("CoreGui")
 local HttpService      = game:GetService("HttpService")
+local RunService       = game:GetService("RunService")
 
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
@@ -99,6 +117,8 @@ local Theme = {
 }
 Library.Theme = Theme
 
+local DEFAULT_WATERMARK = "gamesense | {name} | {fps} fps | {ping}ms | {time}"
+
 -- ───────────────────────── helpers ─────────────────────────
 local function new(class, props, children)
     local inst = Instance.new(class)
@@ -163,16 +183,27 @@ local function isMove(input)
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
-local function makeDraggable(handle, target)
+-- tiny signal used by OnChanged / DependsOn
+local function emitter()
+    local listeners = {}
+    local function connect(fn) listeners[#listeners + 1] = fn end
+    local function fire(...)
+        for _, fn in ipairs(listeners) do task.spawn(fn, ...) end
+    end
+    return connect, fire
+end
+
+local function makeDraggable(handle, target, track)
+    track = track or function(c) return c end
     local dragging, dragStart, startPos
-    handle.InputBegan:Connect(function(input)
+    track(handle.InputBegan:Connect(function(input)
         if isPress(input) then
             dragging = true
             dragStart = input.Position
             startPos = target.Position
         end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
+    end))
+    track(UserInputService.InputChanged:Connect(function(input)
         if dragging and isMove(input) then
             local d = input.Position - dragStart
             target.Position = UDim2.new(
@@ -180,13 +211,29 @@ local function makeDraggable(handle, target)
                 startPos.Y.Scale, startPos.Y.Offset + d.Y
             )
         end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
+    end))
+    track(UserInputService.InputEnded:Connect(function(input)
         if isPress(input) then dragging = false end
-    end)
+    end))
 end
 
-local function gradientLine(parent)
+-- ── the line on top of the window ──
+-- state = { Rainbow = bool, Speed = number }  (shared, so it can be switched at runtime)
+local DEFAULT_LINE = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),
+})
+
+local function rainbowSeq(t)
+    local keys = {}
+    for i = 0, 6 do
+        keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((t - i / 6) % 1, 0.75, 1))
+    end
+    return ColorSequence.new(keys)
+end
+
+local function gradientLine(parent, state)
     local line = new("Frame", {
         Size = UDim2.new(1, 0, 0, 2),
         BackgroundColor3 = Color3.new(1, 1, 1),
@@ -194,14 +241,24 @@ local function gradientLine(parent)
         ZIndex = 30,
         Parent = parent,
     })
-    new("UIGradient", {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),
-            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),
-            ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),
-        }),
-        Parent = line,
-    })
+    local grad = new("UIGradient", { Color = DEFAULT_LINE, Parent = line })
+    if state then
+        local was = false
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if not line:IsDescendantOf(game) then
+                conn:Disconnect()
+                return
+            end
+            if state.Rainbow then
+                was = true
+                grad.Color = rainbowSeq((os.clock() * (state.Speed or 0.25)) % 1)
+            elseif was then
+                was = false
+                grad.Color = DEFAULT_LINE
+            end
+        end)
+    end
     return line
 end
 
@@ -253,11 +310,12 @@ local function keyText(k)
     return "[" .. n .. "]"
 end
 
-local function makeKeybind(container, key, mode, callback, ctx)
+local function makeKeybind(container, key, mode, callback, ctx, name)
     callback = callback or function() end
     mode = mode or "Hold"
     local listening = false
     local active = (mode == "Always") or (mode == "Off")
+    local obj = { Instance = nil }
 
     local btn = new("TextButton", {
         AutomaticSize = Enum.AutomaticSize.X,
@@ -271,12 +329,18 @@ local function makeKeybind(container, key, mode, callback, ctx)
         LayoutOrder = #container:GetChildren(),
         Parent = container,
     })
+    obj.Instance = btn
+
+    local function changed()
+        if ctx.refreshKeybinds then ctx.refreshKeybinds() end
+    end
 
     local function setActive(v)
         if v ~= active then
             active = v
             task.spawn(callback, active)
         end
+        changed()
     end
 
     local PW, PH = 84, #MODES * 16 + 2
@@ -305,6 +369,7 @@ local function makeKeybind(container, key, mode, callback, ctx)
             mode = m[2]
             if mode == "Always" or mode == "Off" then setActive(true) else setActive(false) end
             refreshModes()
+            changed()
             ctx.close()
         end)
     end
@@ -320,7 +385,7 @@ local function makeKeybind(container, key, mode, callback, ctx)
         ctx.open(pop)
     end)
 
-    UserInputService.InputBegan:Connect(function(input, gp)
+    ctx.track(UserInputService.InputBegan:Connect(function(input, gp)
         if listening then
             local k
             if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -334,6 +399,7 @@ local function makeKeybind(container, key, mode, callback, ctx)
                 key = (k ~= Enum.KeyCode.Escape) and k or nil
                 btn.Text = keyText(key)
                 btn.TextColor3 = Theme.TextDim
+                if obj.KeyChanged then obj.KeyChanged(key) end
             end
             return
         end
@@ -343,22 +409,27 @@ local function makeKeybind(container, key, mode, callback, ctx)
             elseif mode == "Toggle" then setActive(not active)
             elseif mode == "Off" then setActive(false) end
         end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
+    end))
+    ctx.track(UserInputService.InputEnded:Connect(function(input)
         if not key then return end
         if input.KeyCode == key or input.UserInputType == key then
             if mode == "Hold" then setActive(false)
             elseif mode == "Off" then setActive(true) end
         end
-    end)
+    end))
 
-    local obj = { Instance = btn }
     function obj:Get() return active end
     function obj:GetKey() return key end
-    function obj:SetKey(k) key = k btn.Text = keyText(key) end
+    function obj:SetKey(k)
+        key = k
+        btn.Text = keyText(key)
+        if obj.KeyChanged then obj.KeyChanged(key) end
+    end
     function obj:GetMode() return mode end
-    function obj:SetMode(m) mode = m refreshModes() end
+    function obj:SetMode(m) mode = m refreshModes() changed() end
     function obj:SetVisible(v) btn.Visible = v end
+
+    if name and ctx.addKeybind then ctx.addKeybind(name, obj) end
     return obj
 end
 
@@ -532,12 +603,12 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     hook(svHit, "sv")
     hook(hueBar, "hue")
     if hasAlpha then hook(alphaBar, "alpha") end
-    UserInputService.InputChanged:Connect(function(input)
+    ctx.track(UserInputService.InputChanged:Connect(function(input)
         if mode and isMove(input) then update(input.Position) end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
+    end))
+    ctx.track(UserInputService.InputEnded:Connect(function(input)
         if isPress(input) then mode = nil end
-    end)
+    end))
 
     box.MouseButton1Click:Connect(function()
         ctx.place(pop, box, W, H)   -- opens right below the swatch
@@ -555,6 +626,24 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     return obj
 end
 
+-- is `inst` actually on screen under the mouse? (walks visibility + clipping)
+local function hoverable(inst, root, m)
+    local p = inst
+    while p and p ~= root do
+        if p:IsA("GuiObject") then
+            if not p.Visible then return false end
+            if p.ClipsDescendants and p ~= inst then
+                local pp, ps = p.AbsolutePosition, p.AbsoluteSize
+                if m.X < pp.X or m.X > pp.X + ps.X or m.Y < pp.Y or m.Y > pp.Y + ps.Y then
+                    return false
+                end
+            end
+        end
+        p = p.Parent
+    end
+    return true
+end
+
 -- ───────────────────────── window ─────────────────────────
 function Library:CreateWindow(cfg)
     cfg = cfg or {}
@@ -566,6 +655,12 @@ function Library:CreateWindow(cfg)
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
+    -- rainbow state shared by every gradient line of this window
+    local rb = {
+        Rainbow = (cfg.Rainbow == true) or (cfg.GradientLine == "Rainbow"),
+        Speed = cfg.RainbowSpeed or 0.25,
+    }
+
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
         ResetOnSpawn = false,
@@ -573,6 +668,14 @@ function Library:CreateWindow(cfg)
         IgnoreGuiInset = true,
         Parent = getParent(),
     })
+
+    -- every window-level connection goes through here so Destroy() cleans up everything
+    local conns = {}
+    local function track(c) conns[#conns + 1] = c return c end
+
+    -- accent colour: anything tinted with Theme.Accent registers a repaint function here
+    local accentUpdaters = {}
+    local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
 
     -- 3 stacked frames = the black / grey / black ring around the window
     local outer = new("Frame", {
@@ -606,7 +709,7 @@ function Library:CreateWindow(cfg)
 
     -- gradient line is on by default (like gamesense); pass GradientLine = false to remove it
     local showLine = cfg.GradientLine ~= false
-    if showLine then gradientLine(inner) end
+    if showLine then gradientLine(inner, rb) end
     local TOP = showLine and 2 or 0
 
     local popupLayer = new("Frame", {
@@ -642,7 +745,7 @@ function Library:CreateWindow(cfg)
     blocker.MouseButton1Down:Connect(closePopup)
     blocker.MouseButton2Down:Connect(closePopup)
 
-    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup }
+    local ctx = { gui = gui, layer = popupLayer, open = openPopup, close = closePopup, track = track }
 
     -- puts a popup directly under the widget that was clicked.
     -- only flips above the widget when there is genuinely no room below.
@@ -673,7 +776,7 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
-    -- watermark (top right)
+    -- watermark (top right). supports {fps} {ping} {time} {name}
     local wm = new("Frame", {
         Name = "Watermark",
         AutomaticSize = Enum.AutomaticSize.X,
@@ -687,13 +790,34 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     stroke(wm, Theme.Outline, 1)
-    gradientLine(wm).ZIndex = 201
+    gradientLine(wm, rb).ZIndex = 201
     local wmText = label(wm, "", {
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
         ZIndex = 201,
     })
     new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = wmText })
+
+    local wmTemplate
+    local fpsAvg, fpsAcc, fpsN = 60, 0, 0
+    local function pingMs()
+        local ok, v = pcall(function()
+            return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+        end)
+        if ok and v then return math.floor(v + 0.5) end
+        return 0
+    end
+    local function renderWm()
+        if not wmTemplate then return end
+        wmText.Text = (wmTemplate:gsub("{(%w+)}", function(k)
+            k = k:lower()
+            if k == "fps" then return tostring(math.floor(fpsAvg + 0.5))
+            elseif k == "ping" then return tostring(pingMs())
+            elseif k == "time" then return os.date("%H:%M:%S")
+            elseif k == "name" then return Players.LocalPlayer and Players.LocalPlayer.Name or "player"
+            end
+        end))
+    end
 
     -- left tab strip background (darker than the page)
     local tabBg = new("ImageLabel", {
@@ -765,44 +889,217 @@ function Library:CreateWindow(cfg)
         ZIndex = 20,
         Parent = inner,
     })
-    makeDraggable(dragHandle, outer)
-    makeDraggable(tabBg, outer)
-    if hasTitle then
-        label(dragHandle, cfg.Title, {
-            Position = UDim2.fromOffset(8, 0),
-            Size = UDim2.new(1, -16, 1, 0),
-            TextColor3 = Theme.TextDim,
-            TextSize = 11,
-            ZIndex = 21,
-        })
+    makeDraggable(dragHandle, outer, track)
+    makeDraggable(tabBg, outer, track)
+    local titleLabel = label(dragHandle, hasTitle and cfg.Title or "", {
+        Position = UDim2.fromOffset(8, 0),
+        Size = UDim2.new(1, -16, 1, 0),
+        TextColor3 = Theme.TextDim,
+        TextSize = 11,
+        ZIndex = 21,
+    })
+
+    -- ───────── keybind list (gamesense "hotkey list") ─────────
+    local kbEntries = {}
+    local kbEnabled = cfg.KeybindList == true
+    local kbFrame = new("Frame", {
+        Name = "KeybindList",
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.fromOffset(150, 0),
+        Position = UDim2.new(0, 10, 0.5, -40),
+        BackgroundColor3 = Theme.Panel,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 150,
+        Parent = gui,
+    })
+    stroke(kbFrame, Theme.Outline, 1)
+    gradientLine(kbFrame, rb).ZIndex = 151
+    local kbHead = new("TextButton", {
+        Size = UDim2.new(1, 0, 0, 18),
+        Position = UDim2.fromOffset(0, 2),
+        BackgroundTransparency = 1,
+        Text = "keybinds",
+        TextColor3 = Theme.Title,
+        Font = Theme.Font,
+        TextSize = 11,
+        AutoButtonColor = false,
+        ZIndex = 151,
+        Parent = kbFrame,
+    })
+    makeDraggable(kbHead, kbFrame, track)
+    local kbBody = new("Frame", {
+        Position = UDim2.fromOffset(0, 20),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 0, 0),
+        BackgroundTransparency = 1,
+        ZIndex = 151,
+        Parent = kbFrame,
+    })
+    new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = kbBody })
+    new("UIPadding", { PaddingBottom = UDim.new(0, 4), Parent = kbBody })
+
+    local function refreshKeybinds()
+        for _, c in ipairs(kbBody:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
+        end
+        local n = 0
+        for _, e in ipairs(kbEntries) do
+            local m = e.Obj:GetMode()
+            if e.Obj:Get() and (m == "Hold" or m == "Toggle") then
+                n += 1
+                local r = new("Frame", {
+                    Size = UDim2.new(1, 0, 0, 14),
+                    BackgroundTransparency = 1,
+                    LayoutOrder = n,
+                    ZIndex = 152,
+                    Parent = kbBody,
+                })
+                label(r, e.Name, {
+                    Position = UDim2.fromOffset(6, 0),
+                    Size = UDim2.new(1, -72, 1, 0),
+                    TextSize = 11,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    ZIndex = 153,
+                })
+                label(r, (m == "Hold") and "[holding]" or "[toggled]", {
+                    Position = UDim2.new(1, -64, 0, 0),
+                    Size = UDim2.fromOffset(58, 14),
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    TextColor3 = Theme.TextDim,
+                    TextSize = 11,
+                    ZIndex = 153,
+                })
+            end
+        end
+        kbFrame.Visible = kbEnabled and (n > 0 or outer.Visible)
     end
+    ctx.refreshKeybinds = refreshKeybinds
+    function ctx.addKeybind(name, obj)
+        kbEntries[#kbEntries + 1] = { Name = name, Obj = obj }
+    end
+
+    -- ───────── tooltips ─────────
+    local tipFrame = new("Frame", {
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        BackgroundColor3 = Theme.Panel,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 300,
+        Parent = gui,
+    })
+    stroke(tipFrame, Theme.Outline, 1)
+    local tipLabel = label(tipFrame, "", {
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        TextSize = 11,
+        ZIndex = 301,
+    })
+    new("UIPadding", {
+        PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6),
+        PaddingTop = UDim.new(0, 3), PaddingBottom = UDim.new(0, 3),
+        Parent = tipLabel,
+    })
+    local tips = {}
+    function ctx.addTip(frame)
+        local rec = { Frame = frame, Text = nil }
+        tips[#tips + 1] = rec
+        return rec
+    end
+    local tipFor, tipSince = nil, 0
+
+    -- one heartbeat drives fps counter, watermark refresh and tooltips
+    track(RunService.Heartbeat:Connect(function(dt)
+        fpsAcc += dt
+        fpsN += 1
+        if fpsAcc >= 0.5 then
+            fpsAvg = fpsN / fpsAcc
+            fpsAcc, fpsN = 0, 0
+            if wmTemplate and wm.Visible then renderWm() end
+        end
+
+        if not outer.Visible or activePopup or #tips == 0 then
+            tipFrame.Visible = false
+            tipFor = nil
+            return
+        end
+        local m = UserInputService:GetMouseLocation()
+        local found
+        for _, t in ipairs(tips) do
+            local f = t.Frame
+            if t.Text and f.Parent then
+                local p, s = f.AbsolutePosition, f.AbsoluteSize
+                if m.X >= p.X and m.X <= p.X + s.X and m.Y >= p.Y and m.Y <= p.Y + s.Y
+                    and hoverable(f, gui, m) then
+                    found = t
+                    break
+                end
+            end
+        end
+        if found ~= tipFor then
+            tipFor = found
+            tipSince = os.clock()
+            tipFrame.Visible = false
+        end
+        if found and os.clock() - tipSince > 0.4 then
+            tipLabel.Text = found.Text
+            local scr = gui.AbsoluteSize
+            local x = math.min(m.X + 14, scr.X - tipFrame.AbsoluteSize.X - 4)
+            tipFrame.Position = UDim2.fromOffset(math.max(4, x), m.Y + 18)
+            tipFrame.Visible = true
+        end
+    end))
 
     local Window = { Tabs = {}, Gui = gui, Main = outer, Flags = {} }
     local selected
 
-    UserInputService.InputBegan:Connect(function(input, gp)
+    track(UserInputService.InputBegan:Connect(function(input, gp)
         if not gp and input.KeyCode == bind then
             outer.Visible = not outer.Visible
             closePopup()
+            refreshKeybinds()
         end
-    end)
+    end))
 
-    function Window:SetVisible(v) outer.Visible = v and true or false closePopup() end
+    function Window:SetVisible(v) outer.Visible = v and true or false closePopup() refreshKeybinds() end
     function Window:IsVisible() return outer.Visible end
     function Window:Toggle() Window:SetVisible(not outer.Visible) end
     function Window:SetBind(key) bind = key end
-    function Window:Destroy() gui:Destroy() end
+    function Window:SetTitle(t) titleLabel.Text = tostring(t or "") end
+    function Window:Destroy()
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+        gui:Destroy()
+    end
 
     function Window:SetWatermark(text)
         if text == nil or text == "" then
+            wmTemplate = nil
             wm.Visible = false
         else
-            wmText.Text = tostring(text)
+            wmTemplate = tostring(text)
             wm.Visible = true
+            renderWm()
         end
     end
 
-    function Window:Notify(text, duration)
+    function Window:SetKeybindList(v)
+        kbEnabled = v and true or false
+        refreshKeybinds()
+    end
+
+    function Window:SetRainbow(on, speed)
+        rb.Rainbow = on and true or false
+        if speed then rb.Speed = speed end
+    end
+
+    function Window:SetAccent(c)
+        Theme.Accent = c
+        for _, fn in ipairs(accentUpdaters) do pcall(fn) end
+    end
+    function Window:GetAccent() return Theme.Accent end
+
+    function Window:Notify(text, duration, color)
         duration = duration or 4
         local f = new("Frame", {
             AutomaticSize = Enum.AutomaticSize.XY,
@@ -814,7 +1111,7 @@ function Library:CreateWindow(cfg)
         stroke(f, Theme.Outline, 1)
         new("Frame", {
             Size = UDim2.new(0, 2, 1, 0),
-            BackgroundColor3 = Theme.Accent,
+            BackgroundColor3 = color or Theme.Accent,
             BorderSizePixel = 0,
             ZIndex = 2,
             Parent = f,
@@ -888,6 +1185,14 @@ function Library:CreateWindow(cfg)
             obj:SetKey(k)
             if val.Mode then obj:SetMode(val.Mode) end
         end
+    end
+
+    -- read the current value of any registered element:  Window:GetFlag("Rage/Aimbot/Enabled")
+    function Window:GetFlag(path)
+        local f = Flags[path]
+        if not f then return nil end
+        local ok, v = pcall(serialize, f.Kind, f.Obj)
+        if ok then return v end
     end
 
     function Window:ExportConfig()
@@ -1178,7 +1483,9 @@ function Library:CreateWindow(cfg)
             layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resize)
             resize()
 
-            local Section = {}
+            local Section = { Holder = holder }
+            function Section:SetVisible(v) holder.Visible = v and true or false end
+
             local order = 0
             local function nextOrder() order += 1 return order end
             local function row(h)
@@ -1194,12 +1501,36 @@ function Library:CreateWindow(cfg)
             local RESERVE = 46
 
             local function reg(kind, text, obj)
-                if name == "Config" then return end
+                -- the Config tab is not saved, except its "Menu" section (accent, rainbow, ...)
+                if name == "Config" and secName ~= "Menu" then return end
                 register(name .. "/" .. secName .. "/" .. text, kind, obj)
             end
+
+            -- shared extras every element gets
             local function vis(obj, frame)
                 obj.Row = frame
                 function obj:SetVisible(v) frame.Visible = v and true or false end
+
+                local tipRec
+                function obj:SetTooltip(t)
+                    tipRec = tipRec or ctx.addTip(frame)
+                    tipRec.Text = t
+                    return obj
+                end
+
+                -- show this element only while `other:Get() == expected`
+                function obj:DependsOn(other, expected)
+                    if expected == nil then expected = true end
+                    local function check()
+                        local val = other:Get()
+                        local ok
+                        if type(expected) == "function" then ok = expected(val) else ok = (val == expected) end
+                        frame.Visible = ok and true or false
+                    end
+                    if other.OnChanged then other:OnChanged(check) end
+                    check()
+                    return obj
+                end
                 return obj
             end
 
@@ -1207,6 +1538,7 @@ function Library:CreateWindow(cfg)
             function Section:AddToggle(text, default, callback)
                 callback = callback or function() end
                 local state = default and true or false
+                local onChanged, fire = emitter()
                 local r = new("TextButton", {
                     Size = UDim2.new(1, 0, 0, 16),
                     BackgroundTransparency = 1,
@@ -1231,25 +1563,33 @@ function Library:CreateWindow(cfg)
                     Position = UDim2.fromOffset(INDENT, 0),
                     ZIndex = 8,
                 })
-                local rb = rightBox(r)
-                rb.ZIndex = 8
+                local rbox = rightBox(r)
+                rbox.ZIndex = 8
+
+                local function paint()
+                    check.BackgroundColor3 = state and Theme.Accent or Theme.CheckOff
+                end
+                onAccent(paint)
 
                 local obj = {}
                 function obj:Set(v)
                     state = v and true or false
-                    check.BackgroundColor3 = state and Theme.Accent or Theme.CheckOff
+                    paint()
                     task.spawn(callback, state)
+                    fire(state)
                 end
                 function obj:Get() return state end
+                function obj:Toggle() obj:Set(not state) end
+                function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetText(t) lbl.Text = t end
                 function obj:SetTextColor(c) lbl.TextColor3 = c end
                 function obj:AddKeybind(key, mode, cb)
-                    local k = makeKeybind(rb, key, mode, cb, ctx)
+                    local k = makeKeybind(rbox, key, mode, cb, ctx, text)
                     reg("keybind", text .. " key", k)
                     return k
                 end
                 function obj:AddColorPicker(color, alpha, cb)
-                    local c = makeColorPicker(rb, color, alpha, cb, ctx)
+                    local c = makeColorPicker(rbox, color, alpha, cb, ctx)
                     reg("color", text .. " colour", c)
                     return c
                 end
@@ -1262,6 +1602,7 @@ function Library:CreateWindow(cfg)
             function Section:AddSlider(text, min, max, default, callback, fmt, step)
                 callback = callback or function() end
                 step = step or 1
+                local onChanged, fire = emitter()
                 local function snap(x)
                     x = math.clamp(x, min, max)
                     x = math.floor((x - min) / step + 0.5) * step + min
@@ -1294,6 +1635,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 9,
                     Parent = bar,
                 })
+                onAccent(function() fill.BackgroundColor3 = Theme.Accent end)
                 new("UIGradient", {
                     Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 150, 150)),
                     Rotation = 90,
@@ -1348,8 +1690,10 @@ function Library:CreateWindow(cfg)
                     value = snap(x)
                     render()
                     task.spawn(callback, value)
+                    fire(value)
                 end
                 function obj:Get() return value end
+                function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetText(t) lbl.Text = t end
                 render()
 
@@ -1367,12 +1711,12 @@ function Library:CreateWindow(cfg)
                         update(i.Position.X)
                     end
                 end)
-                UserInputService.InputChanged:Connect(function(i)
+                track(UserInputService.InputChanged:Connect(function(i)
                     if dragging and isMove(i) then update(i.Position.X) end
-                end)
-                UserInputService.InputEnded:Connect(function(i)
+                end))
+                track(UserInputService.InputEnded:Connect(function(i)
                     if isPress(i) then dragging = false end
-                end)
+                end))
                 reg("slider", text, obj)
                 return vis(obj, holder2)
             end
@@ -1381,6 +1725,7 @@ function Library:CreateWindow(cfg)
             function Section:AddDropdown(text, options, default, callback, multi)
                 callback = callback or function() end
                 options = options or {}
+                local onChanged, fire = emitter()
                 local selectedValue
                 if multi then
                     selectedValue = {}
@@ -1482,6 +1827,7 @@ function Library:CreateWindow(cfg)
                                 selectedValue[opt] = (not selectedValue[opt]) or nil
                                 refresh()
                                 task.spawn(callback, selectedValue)
+                                fire(selectedValue)
                             else
                                 obj:Set(opt)
                                 closePopup()
@@ -1502,8 +1848,10 @@ function Library:CreateWindow(cfg)
                     end
                     refresh()
                     task.spawn(callback, selectedValue)
+                    fire(selectedValue)
                 end
                 function obj:Get() return selectedValue end
+                function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetOptions(newOptions)
                     options = newOptions or {}
                     if multi then
@@ -1538,6 +1886,7 @@ function Library:CreateWindow(cfg)
                 options = options or {}
                 rows = rows or 6
                 local ROW = 16
+                local onChanged, fire = emitter()
                 local selectedValue
                 if multi then
                     selectedValue = {}
@@ -1590,6 +1939,7 @@ function Library:CreateWindow(cfg)
                         b.Font = isOn(o) and Theme.FontBold or Theme.Font
                     end
                 end
+                onAccent(refresh)
                 local function build()
                     for _, b in pairs(buttons) do b:Destroy() end
                     table.clear(buttons)
@@ -1612,6 +1962,7 @@ function Library:CreateWindow(cfg)
                                 selectedValue[opt] = (not selectedValue[opt]) or nil
                                 refresh()
                                 task.spawn(callback, selectedValue)
+                                fire(selectedValue)
                             else
                                 obj:Set(opt)
                             end
@@ -1630,8 +1981,10 @@ function Library:CreateWindow(cfg)
                     end
                     refresh()
                     task.spawn(callback, selectedValue)
+                    fire(selectedValue)
                 end
                 function obj:Get() return selectedValue end
+                function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetOptions(newOptions)
                     options = newOptions or {}
                     build()
@@ -1649,9 +2002,9 @@ function Library:CreateWindow(cfg)
                     Position = UDim2.fromOffset(INDENT, 0),
                     ZIndex = 8,
                 })
-                local rb = rightBox(r)
-                rb.ZIndex = 8
-                local obj = makeKeybind(rb, key, mode, callback, ctx)
+                local rbox = rightBox(r)
+                rbox.ZIndex = 8
+                local obj = makeKeybind(rbox, key, mode, callback, ctx, text)
                 reg("keybind", text, obj)
                 return vis(obj, r)
             end
@@ -1664,9 +2017,9 @@ function Library:CreateWindow(cfg)
                     Position = UDim2.fromOffset(INDENT, 0),
                     ZIndex = 8,
                 })
-                local rb = rightBox(r)
-                rb.ZIndex = 8
-                local obj = makeColorPicker(rb, color, alpha, callback, ctx)
+                local rbox = rightBox(r)
+                rbox.ZIndex = 8
+                local obj = makeColorPicker(rbox, color, alpha, callback, ctx)
                 reg("color", text, obj)
                 return vis(obj, r)
             end
@@ -1707,24 +2060,49 @@ function Library:CreateWindow(cfg)
                     TextColor3 = Theme.TextDim,
                     ZIndex = 8,
                 })
-                local rb
+                local rbox
                 local obj = { Instance = l }
                 function obj:Set(t) l.Text = t end
                 function obj:SetColor(c) l.TextColor3 = c end
                 function obj:AddColorPicker(color, alpha, cb)
-                    rb = rb or rightBox(r)
-                    rb.ZIndex = 8
-                    local c = makeColorPicker(rb, color, alpha, cb, ctx)
+                    rbox = rbox or rightBox(r)
+                    rbox.ZIndex = 8
+                    local c = makeColorPicker(rbox, color, alpha, cb, ctx)
                     reg("color", text .. " colour", c)
                     return c
                 end
                 function obj:AddKeybind(key, mode, cb)
-                    rb = rb or rightBox(r)
-                    rb.ZIndex = 8
-                    local k = makeKeybind(rb, key, mode, cb, ctx)
+                    rbox = rbox or rightBox(r)
+                    rbox.ZIndex = 8
+                    local k = makeKeybind(rbox, key, mode, cb, ctx, text)
                     reg("keybind", text .. " key", k)
                     return k
                 end
+                return vis(obj, r)
+            end
+
+            -- wrapped multi-line info text
+            function Section:AddInfo(text)
+                local r = new("Frame", {
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    BackgroundTransparency = 1,
+                    LayoutOrder = nextOrder(),
+                    ZIndex = 7,
+                    Parent = items,
+                })
+                local l = label(r, text, {
+                    Position = UDim2.fromOffset(INDENT, 0),
+                    Size = UDim2.new(1, -RESERVE, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    TextWrapped = true,
+                    TextYAlignment = Enum.TextYAlignment.Top,
+                    TextColor3 = Theme.TextDim,
+                    ZIndex = 8,
+                })
+                local obj = { Instance = l }
+                function obj:Set(t) l.Text = t end
+                function obj:SetColor(c) l.TextColor3 = c end
                 return vis(obj, r)
             end
 
@@ -1787,7 +2165,7 @@ function Library:CreateWindow(cfg)
         return Tab
     end
 
-    -- ready made config tab
+    -- ready made config tab (presets, sharing, and a "Menu" section for accent / rainbow / overlays)
     function Window:AddConfigTab(opts)
         opts = opts or {}
         local tab = Window:AddTab({ Name = "Config", Icon = opts.Icon or "config" })
@@ -1821,6 +2199,23 @@ function Library:CreateWindow(cfg)
         end)
         presets:AddButton("Refresh list", refreshList)
 
+        local menu = tab:AddSection("Menu", "Left")
+        menu:AddLabel("Menu accent"):AddColorPicker(Theme.Accent, false, function(c) Window:SetAccent(c) end)
+        local rbToggle = menu:AddToggle("Rainbow line", rb.Rainbow, function(v) Window:SetRainbow(v) end)
+        local rbSpeed = menu:AddSlider("Rainbow speed", 1, 100, math.floor(rb.Speed * 100 + 0.5),
+            function(v) rb.Speed = v / 100 end, "%")
+        rbSpeed:DependsOn(rbToggle, true)
+        menu:AddToggle("Keybind list", kbEnabled, function(v) Window:SetKeybindList(v) end)
+        menu:AddToggle("Watermark", wmTemplate ~= nil, function(v)
+            Window:SetWatermark(v and DEFAULT_WATERMARK or nil)
+        end)
+        local menuKey = menu:AddKeybind("Menu key", bind, "Always")
+        menuKey.KeyChanged = function(k)
+            if k and typeof(k) == "EnumItem" and k.EnumType == Enum.KeyCode then
+                Window:SetBind(k)
+            end
+        end
+
         local share = tab:AddSection("Share", "Right")
         share:AddButton("Export to clipboard", function()
             if setclipboard then
@@ -1839,6 +2234,12 @@ function Library:CreateWindow(cfg)
         share:AddButton("Unload UI", function() Window:Destroy() end)
         return tab
     end
+
+    -- optional startup config
+    if cfg.Watermark then
+        Window:SetWatermark(cfg.Watermark == true and DEFAULT_WATERMARK or cfg.Watermark)
+    end
+    refreshKeybinds()
 
     return Window
 end
