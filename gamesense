@@ -105,15 +105,15 @@ end
 
 local Theme = {
     Background = Color3.fromRGB(12, 12, 12),
-    Panel      = Color3.fromRGB(23, 23, 23),
-    Section    = Color3.fromRGB(23, 23, 23),
-    Element    = Color3.fromRGB(36, 36, 36),
-    CheckOff   = Color3.fromRGB(64, 64, 64),
-    Border     = Color3.fromRGB(45, 45, 45),
-    Frame      = Color3.fromRGB(58, 58, 58),   -- the lighter ring around the whole window
+    Panel      = Color3.fromRGB(17, 17, 17),
+    Section    = Color3.fromRGB(12, 12, 12),
+    Element    = Color3.fromRGB(38, 38, 38),
+    CheckOff   = Color3.fromRGB(56, 56, 56),
+    Border     = Color3.fromRGB(40, 40, 40),
+    Frame      = Color3.fromRGB(58, 58, 58),
     Outline    = Color3.fromRGB(0, 0, 0),
-    Text       = Color3.fromRGB(205, 205, 205),
-    Title      = Color3.fromRGB(225, 225, 225),
+    Text       = Color3.fromRGB(201, 201, 201),
+    Title      = Color3.fromRGB(220, 220, 220),
     TextDim    = Color3.fromRGB(140, 140, 140),
     Accent     = Color3.fromRGB(149, 184, 6),
     ScrollBar  = Color3.fromRGB(72, 72, 72),
@@ -1242,33 +1242,42 @@ function Library:CreateWindow(cfg)
     function Window:GetAccent() return Theme.Accent end
 
     function Window:Notify(text, duration, color)
-        duration = duration or 4
-        local f = new("Frame", {
-            AutomaticSize = Enum.AutomaticSize.XY,
-            Size = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = Theme.Panel,
-            BorderSizePixel = 0,
-            Parent = notifyLayer,
-        })
-        stroke(f, Theme.Outline, 1)
-        new("Frame", {
-            Size = UDim2.new(0, 2, 1, 0),
-            BackgroundColor3 = color or Theme.Accent,
-            BorderSizePixel = 0,
-            ZIndex = 3,
-            Parent = f,
-        })
-        local l, sh = label(f, tostring(text), {
-            AutomaticSize = Enum.AutomaticSize.XY,
-            Size = UDim2.fromOffset(0, 0),
-            ZIndex = 3,
-        })
-        padLabel(l, sh, {
-            PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 8),
-            PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5),
-        })
-        task.delay(duration, function() f:Destroy() end)
-    end
+    duration = duration or 4
+    local f = new("Frame", {
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        BackgroundColor3 = OVERLAY_BG,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = notifyLayer,
+    })
+    new("UIGradient", { Transparency = OVERLAY_FADE, Parent = f })
+
+    local bar = new("Frame", {
+        Size = UDim2.new(1, 0, 0, 2),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 4,
+        Parent = f,
+    })
+    new("UIGradient", {
+        Color = color and ColorSequence.new(color) or DEFAULT_LINE,
+        Parent = bar,
+    })
+
+    local l, sh = label(f, tostring(text), {
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        Font = OVERLAY_FONT,
+        TextSize = OVERLAY_SIZE,
+        ZIndex = 4,
+    })
+    padLabel(l, sh, {
+        PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
+        PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 5),
+    })
+    task.delay(duration, function() f:Destroy() end)
+end
 
     function Window:SelectTab(which)
         for i, t in ipairs(Window.Tabs) do
