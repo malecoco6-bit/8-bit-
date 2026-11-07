@@ -69,7 +69,7 @@ local Theme = {
 Library.Theme = Theme
 
 -- special value: draws the gamesense style watermark
--- (any other string passed to SetWatermark still works as a plain template with {name} {fps} {ping} {time})
+-- (any other string passed to SetWatermark still works as a plain template with {name} {fps} {ping} {time} {config})
 local DEFAULT_WATERMARK = "{gamesense}"
 
 -- ───────────────────────── helpers ─────────────────────────
@@ -99,7 +99,22 @@ end
 
 -- watermark colours (gamesense style)
 local WM_VALUE = Color3.fromRGB(231, 226, 54)   -- yellow numbers (fps / ping)
-local WM_SMALL = Color3.fromRGB(205, 205, 205)  -- the small FPS / PING labels
+local WM_SMALL = Color3.fromRGB(205, 205, 205)  -- the small FPS / PING labels + config name
+
+-- font + size shared by the watermark AND the keybind list.
+-- gamesense uses Verdana, which Roblox doesn't have, so Source Sans is the closest match.
+-- change these two lines to restyle both at once.
+local OVERLAY_FONT = Enum.Font.SourceSans
+local OVERLAY_SIZE = 14
+
+-- soft fade behind the watermark / keybind list (the edges fade out like in gamesense)
+local OVERLAY_FADE = NumberSequence.new({
+    NumberSequenceKeypoint.new(0,    0.92),
+    NumberSequenceKeypoint.new(0.18, 0.22),
+    NumberSequenceKeypoint.new(0.82, 0.22),
+    NumberSequenceKeypoint.new(1,    0.92),
+})
+local OVERLAY_BG = Color3.fromRGB(14, 14, 14)
 
 local function hex(c)
     return string.format("#%02x%02x%02x",
@@ -751,22 +766,21 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
-    -- ── watermark (gamesense style) ──
+    -- ── watermark (gamesense style: faded background, no top line) ──
     local wm = new("Frame", {
         Name = "Watermark",
         AutomaticSize = Enum.AutomaticSize.X,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -10, 0, 10),
         Size = UDim2.fromOffset(0, 20),
-        BackgroundColor3 = Color3.fromRGB(14, 14, 14),
-        BackgroundTransparency = 0.2,
+        BackgroundColor3 = OVERLAY_BG,
+        BackgroundTransparency = 0,
         BorderSizePixel = 0,
         Visible = false,
         ZIndex = 200,
         Parent = gui,
     })
-    stroke(wm, Theme.Outline, 1)
-    gradientLine(wm).ZIndex = 201
+    new("UIGradient", { Transparency = OVERLAY_FADE, Parent = wm })
 
     -- rich text label (several colours in one label) + a plain black shadow behind it
     local wmShadow = new("TextLabel", {
@@ -774,8 +788,8 @@ function Library:CreateWindow(cfg)
         RichText = false,
         Text = "",
         TextColor3 = Color3.new(0, 0, 0),
-        Font = Theme.Font,
-        TextSize = 12,
+        Font = OVERLAY_FONT,
+        TextSize = OVERLAY_SIZE,
         TextXAlignment = Enum.TextXAlignment.Left,
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
@@ -788,8 +802,8 @@ function Library:CreateWindow(cfg)
         RichText = true,
         Text = "",
         TextColor3 = Theme.Text,
-        Font = Theme.Font,
-        TextSize = 12,
+        Font = OVERLAY_FONT,
+        TextSize = OVERLAY_SIZE,
         TextXAlignment = Enum.TextXAlignment.Left,
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
@@ -797,9 +811,10 @@ function Library:CreateWindow(cfg)
         ZIndex = 202,
         Parent = wm,
     })
-    padLabel(wmText, wmShadow, { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+    padLabel(wmText, wmShadow, { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16) })
 
     local wmTemplate
+    local currentConfig = "default" -- name of the config in use (shown in the watermark)
     local fpsAvg, fpsAcc, fpsN = 60, 0, 0
     local function pingMs()
         local ok, v = pcall(function()
@@ -816,21 +831,24 @@ function Library:CreateWindow(cfg)
             local fps = tostring(math.floor(fpsAvg + 0.5))
             local ping = tostring(pingMs())
             local yellow, dim = hex(WM_VALUE), hex(WM_SMALL)
+            local smallSize = math.max(OVERLAY_SIZE - 4, 8)
             local function small(t)
-                return string.format('<font size="9" color="%s">%s</font>', dim, t)
+                return string.format('<font size="%d" color="%s">%s</font>', smallSize, dim, t)
             end
 
+            -- gamesense  <config>  188 FPS  44 PING  14:28:21
             rich = string.format(
-                '<b>game<font color="%s">sense</font></b>   <font color="%s"><b>%s</b></font> %s   <font color="%s"><b>%s</b></font> %s   %s',
-                hex(Theme.Accent), yellow, fps, small("FPS"), yellow, ping, small("PING"), os.date("%H:%M:%S")
+                '<b>game<font color="%s">sense</font></b>   <font color="%s">%s</font>   <font color="%s"><b>%s</b></font> %s   <font color="%s"><b>%s</b></font> %s   %s',
+                hex(Theme.Accent), dim, currentConfig, yellow, fps, small("FPS"), yellow, ping, small("PING"), os.date("%H:%M:%S")
             )
         else
-            -- custom template: same placeholders as before
+            -- custom template: same placeholders as before (+ {config})
             rich = (wmTemplate:gsub("{(%w+)}", function(k)
                 k = k:lower()
                 if k == "fps" then return tostring(math.floor(fpsAvg + 0.5))
                 elseif k == "ping" then return tostring(pingMs())
                 elseif k == "time" then return os.date("%H:%M:%S")
+                elseif k == "config" then return currentConfig
                 elseif k == "name" then return Players.LocalPlayer and Players.LocalPlayer.Name or "player"
                 end
             end))
@@ -919,6 +937,7 @@ function Library:CreateWindow(cfg)
         ZIndex = 21,
     })
 
+    -- ── keybind list (same faded background + same font as the watermark) ──
     local kbEntries = {}
     local kbEnabled = cfg.KeybindList == true
     local kbFrame = new("Frame", {
@@ -926,17 +945,17 @@ function Library:CreateWindow(cfg)
         AutomaticSize = Enum.AutomaticSize.Y,
         Size = UDim2.fromOffset(150, 0),
         Position = UDim2.new(0, 10, 0.5, -40),
-        BackgroundColor3 = Theme.Panel,
+        BackgroundColor3 = OVERLAY_BG,
+        BackgroundTransparency = 0,
         BorderSizePixel = 0,
         Visible = false,
         ZIndex = 150,
         Parent = gui,
     })
-    stroke(kbFrame, Theme.Outline, 1)
-    gradientLine(kbFrame).ZIndex = 151
+    new("UIGradient", { Transparency = OVERLAY_FADE, Parent = kbFrame })
     local kbHead = new("TextButton", {
-        Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.fromOffset(0, 3),
+        Size = UDim2.new(1, 0, 0, 20),
+        Position = UDim2.fromOffset(0, 2),
         BackgroundTransparency = 1,
         Text = "",
         AutoButtonColor = false,
@@ -947,12 +966,13 @@ function Library:CreateWindow(cfg)
         Size = UDim2.fromScale(1, 1),
         TextXAlignment = Enum.TextXAlignment.Center,
         TextColor3 = Theme.Title,
-        TextSize = 11,
+        Font = OVERLAY_FONT,
+        TextSize = OVERLAY_SIZE,
         ZIndex = 152,
     })
     makeDraggable(kbHead, kbFrame, track)
     local kbBody = new("Frame", {
-        Position = UDim2.fromOffset(0, 21),
+        Position = UDim2.fromOffset(0, 22),
         AutomaticSize = Enum.AutomaticSize.Y,
         Size = UDim2.new(1, 0, 0, 0),
         BackgroundTransparency = 1,
@@ -972,25 +992,27 @@ function Library:CreateWindow(cfg)
             if e.Obj:Get() and (m == "Hold" or m == "Toggle") then
                 n += 1
                 local r = new("Frame", {
-                    Size = UDim2.new(1, 0, 0, 14),
+                    Size = UDim2.new(1, 0, 0, 16),
                     BackgroundTransparency = 1,
                     LayoutOrder = n,
                     ZIndex = 152,
                     Parent = kbBody,
                 })
                 label(r, e.Name, {
-                    Position = UDim2.fromOffset(6, 0),
-                    Size = UDim2.new(1, -72, 1, 0),
-                    TextSize = 11,
+                    Position = UDim2.fromOffset(12, 0),
+                    Size = UDim2.new(1, -84, 1, 0),
+                    Font = OVERLAY_FONT,
+                    TextSize = OVERLAY_SIZE,
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 153,
                 })
                 label(r, (m == "Hold") and "[holding]" or "[toggled]", {
-                    Position = UDim2.new(1, -64, 0, 0),
-                    Size = UDim2.fromOffset(58, 14),
+                    Position = UDim2.new(1, -76, 0, 0),
+                    Size = UDim2.fromOffset(64, 16),
                     TextXAlignment = Enum.TextXAlignment.Right,
                     TextColor3 = Theme.TextDim,
-                    TextSize = 11,
+                    Font = OVERLAY_FONT,
+                    TextSize = OVERLAY_SIZE,
                     ZIndex = 153,
                 })
             end
@@ -1102,6 +1124,13 @@ function Library:CreateWindow(cfg)
             renderWm()
         end
     end
+
+    -- name of the config shown in the watermark (set automatically when you save / load one)
+    function Window:SetConfigName(n)
+        currentConfig = (n ~= nil and tostring(n) ~= "") and tostring(n) or "default"
+        if wmTemplate and wm.Visible then renderWm() end
+    end
+    function Window:GetConfigName() return currentConfig end
 
     function Window:SetKeybindList(v)
         kbEnabled = v and true or false
@@ -1234,12 +1263,15 @@ function Library:CreateWindow(cfg)
         if not hasFiles() then return false, "your executor has no file functions" end
         if isfolder and makefolder and not isfolder(Library.ConfigFolder) then makefolder(Library.ConfigFolder) end
         writefile(cfgPath(name), Window:ExportConfig())
+        Window:SetConfigName(cleanName(name))
         return true
     end
     function Window:LoadConfig(name)
         if not hasFiles() then return false, "your executor has no file functions" end
         if not isfile(cfgPath(name)) then return false, "config not found" end
-        return Window:ImportConfig(readfile(cfgPath(name)))
+        local ok, err = Window:ImportConfig(readfile(cfgPath(name)))
+        if ok then Window:SetConfigName(cleanName(name)) end
+        return ok, err
     end
     function Window:DeleteConfig(name)
         if delfile and isfile and isfile(cfgPath(name)) then
