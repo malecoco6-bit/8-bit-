@@ -7,10 +7,6 @@ local RunService       = game:GetService("RunService")
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
 
--- ───────────────────────── custom font (Verdana) ─────────────────────────
--- Roblox has no built-in Verdana, so the .ttf is loaded from the executor workspace.
--- Put verdana.ttf (and optionally verdanab.ttf for real bold) in your workspace folder.
--- It loads automatically when you call CreateWindow. You can also call
 -- Library:SetFontFile("verdana.ttf", "verdanab.ttf") yourself before CreateWindow.
 Library.FontFile     = "verdana.ttf"
 Library.FontFileBold = "verdanab.ttf"
