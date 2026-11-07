@@ -426,6 +426,7 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
     end))
 
     function obj:Get() return active end
+    function obj:SetActive(v) setActive(v) end
     function obj:GetKey() return key end
     function obj:SetKey(k)
         key = k
