@@ -390,12 +390,13 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
         ctx.open(pop)
     end)
 
-    ctx.track(UserInputService.InputBegan:Connect(function(input, gp)
+        ctx.track(UserInputService.InputBegan:Connect(function(input, gp)
         if listening then
             local k
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 k = input.KeyCode
-            elseif input.UserInputType == Enum.UserInputType.MouseButton2
+            elseif input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.MouseButton2
                 or input.UserInputType == Enum.UserInputType.MouseButton3 then
                 k = input.UserInputType
             end
@@ -405,6 +406,7 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
                 btn.Text = keyText(key)
                 btn.TextColor3 = Theme.TextDim
                 if obj.KeyChanged then obj.KeyChanged(key) end
+                changed() -- refresh the keybind list immediately
             end
             return
         end
