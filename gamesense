@@ -7,6 +7,35 @@ local RunService       = game:GetService("RunService")
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
 
+-- ───────────────────────── custom font (Verdana) ─────────────────────────
+-- Roblox has no built-in Verdana, so the .ttf is loaded from the executor workspace.
+-- Put verdana.ttf (and optionally verdanab.ttf for real bold) in your workspace folder.
+-- It loads automatically when you call CreateWindow. You can also call
+-- Library:SetFontFile("verdana.ttf", "verdanab.ttf") yourself before CreateWindow.
+Library.FontFile     = "verdana.ttf"
+Library.FontFileBold = "verdanab.ttf"
+Library.FontFace     = nil
+
+function Library:SetFontFile(regularFile, boldFile)
+    regularFile = regularFile or Library.FontFile
+    boldFile = boldFile or Library.FontFileBold
+    if not (isfile and writefile and getcustomasset and isfile(regularFile)) then
+        return false
+    end
+    local ok = pcall(function()
+        local faces = {
+            { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(regularFile) },
+        }
+        if boldFile and isfile(boldFile) then
+            faces[#faces + 1] = { name = "Bold", weight = 700, style = "normal", assetId = getcustomasset(boldFile) }
+        end
+        local fam = "gamesense_verdana.json"
+        writefile(fam, HttpService:JSONEncode({ name = "Verdana", faces = faces }))
+        Library.FontFace = Font.new(getcustomasset(fam), Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    end)
+    return ok and Library.FontFace ~= nil
+end
+
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
@@ -54,8 +83,10 @@ local Theme = {
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    Font     = Enum.Font.Verdana,
-    FontBold = Enum.Font.Verdana,
+    -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
+    -- If verdana.ttf is found, every text object is switched to it automatically.
+    Font     = Enum.Font.Arial,
+    FontBold = Enum.Font.Arial,
     TextSize = 12,
 
     Texture = "rbxassetid://8547666218",
@@ -102,10 +133,9 @@ local WM_VALUE = Color3.fromRGB(231, 226, 54)   -- yellow numbers (fps / ping)
 local WM_SMALL = Color3.fromRGB(205, 205, 205)  -- the small FPS / PING labels + config name
 
 -- font + size shared by the watermark AND the keybind list.
--- gamesense uses Verdana, which Roblox doesn't have, so Source Sans is the closest match.
--- change these two lines to restyle both at once.
+-- (replaced by Verdana automatically when verdana.ttf is loaded)
 local OVERLAY_FONT = Enum.Font.SourceSans
-local OVERLAY_SIZE = 14
+local OVERLAY_SIZE = 12
 
 -- soft fade behind the watermark / keybind list (the edges fade out like in gamesense)
 local OVERLAY_FADE = NumberSequence.new({
@@ -390,7 +420,7 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
         ctx.open(pop)
     end)
 
-        ctx.track(UserInputService.InputBegan:Connect(function(input, gp)
+    ctx.track(UserInputService.InputBegan:Connect(function(input, gp)
         if listening then
             local k
             if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -661,6 +691,11 @@ function Library:CreateWindow(cfg)
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
+    -- try to load Verdana automatically if it hasn't been loaded yet
+    if not Library.FontFace then
+        pcall(function() Library:SetFontFile() end)
+    end
+
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
         ResetOnSpawn = false,
@@ -671,6 +706,28 @@ function Library:CreateWindow(cfg)
 
     local conns = {}
     local function track(c) conns[#conns + 1] = c return c end
+
+    -- ── apply the custom font to every text object (including ones created later) ──
+    if Library.FontFace then
+        local fontFace = Library.FontFace
+        local busy = {}
+        local function skin(d)
+            if busy[d] then return end
+            busy[d] = true
+            pcall(function() d.FontFace = fontFace end)
+            busy[d] = nil
+        end
+        local function hookText(d)
+            if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                skin(d)
+                d:GetPropertyChangedSignal("Font"):Connect(function()
+                    task.defer(skin, d)
+                end)
+            end
+        end
+        for _, d in ipairs(gui:GetDescendants()) do hookText(d) end
+        gui.DescendantAdded:Connect(function(d) task.defer(hookText, d) end)
+    end
 
     local accentUpdaters = {}
     local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
