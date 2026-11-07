@@ -1253,18 +1253,6 @@ function Library:CreateWindow(cfg)
     })
     new("UIGradient", { Transparency = OVERLAY_FADE, Parent = f })
 
-    local bar = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 2),
-        BackgroundColor3 = Color3.new(1, 1, 1),
-        BorderSizePixel = 0,
-        ZIndex = 4,
-        Parent = f,
-    })
-    new("UIGradient", {
-        Color = color and ColorSequence.new(color) or DEFAULT_LINE,
-        Parent = bar,
-    })
-
     local l, sh = label(f, tostring(text), {
         AutomaticSize = Enum.AutomaticSize.XY,
         Size = UDim2.fromOffset(0, 0),
