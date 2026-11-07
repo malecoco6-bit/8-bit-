@@ -68,7 +68,9 @@ local Theme = {
 }
 Library.Theme = Theme
 
-local DEFAULT_WATERMARK = "gamesense | {name} | {fps} fps | {ping}ms | {time}"
+-- special value: draws the gamesense style watermark
+-- (any other string passed to SetWatermark still works as a plain template with {name} {fps} {ping} {time})
+local DEFAULT_WATERMARK = "{gamesense}"
 
 -- ───────────────────────── helpers ─────────────────────────
 local function new(class, props, children)
@@ -93,6 +95,15 @@ end
 
 local function shade(c, m)
     return Color3.new(c.R * m, c.G * m, c.B * m)
+end
+
+-- watermark colours (gamesense style)
+local WM_VALUE = Color3.fromRGB(231, 226, 54)   -- yellow numbers (fps / ping)
+local WM_SMALL = Color3.fromRGB(205, 205, 205)  -- the small FPS / PING labels
+
+local function hex(c)
+    return string.format("#%02x%02x%02x",
+        math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
 end
 
 local function shine(parent, dark)
@@ -740,13 +751,15 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
+    -- ── watermark (gamesense style) ──
     local wm = new("Frame", {
         Name = "Watermark",
         AutomaticSize = Enum.AutomaticSize.X,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -10, 0, 10),
         Size = UDim2.fromOffset(0, 20),
-        BackgroundColor3 = Theme.Panel,
+        BackgroundColor3 = Color3.fromRGB(14, 14, 14),
+        BackgroundTransparency = 0.2,
         BorderSizePixel = 0,
         Visible = false,
         ZIndex = 200,
@@ -754,10 +767,35 @@ function Library:CreateWindow(cfg)
     })
     stroke(wm, Theme.Outline, 1)
     gradientLine(wm).ZIndex = 201
-    local wmText, wmShadow = label(wm, "", {
+
+    -- rich text label (several colours in one label) + a plain black shadow behind it
+    local wmShadow = new("TextLabel", {
+        BackgroundTransparency = 1,
+        RichText = false,
+        Text = "",
+        TextColor3 = Color3.new(0, 0, 0),
+        Font = Theme.Font,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
         AutomaticSize = Enum.AutomaticSize.X,
         Size = UDim2.fromOffset(0, 20),
+        Position = UDim2.fromOffset(1, 2),
         ZIndex = 201,
+        Parent = wm,
+    })
+    local wmText = new("TextLabel", {
+        BackgroundTransparency = 1,
+        RichText = true,
+        Text = "",
+        TextColor3 = Theme.Text,
+        Font = Theme.Font,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        AutomaticSize = Enum.AutomaticSize.X,
+        Size = UDim2.fromOffset(0, 20),
+        Position = UDim2.fromOffset(0, 1),
+        ZIndex = 202,
+        Parent = wm,
     })
     padLabel(wmText, wmShadow, { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
 
@@ -772,15 +810,38 @@ function Library:CreateWindow(cfg)
     end
     local function renderWm()
         if not wmTemplate then return end
-        wmText.Text = (wmTemplate:gsub("{(%w+)}", function(k)
-            k = k:lower()
-            if k == "fps" then return tostring(math.floor(fpsAvg + 0.5))
-            elseif k == "ping" then return tostring(pingMs())
-            elseif k == "time" then return os.date("%H:%M:%S")
-            elseif k == "name" then return Players.LocalPlayer and Players.LocalPlayer.Name or "player"
+        local rich
+
+        if wmTemplate == "{gamesense}" then
+            local fps = tostring(math.floor(fpsAvg + 0.5))
+            local ping = tostring(pingMs())
+            local yellow, dim = hex(WM_VALUE), hex(WM_SMALL)
+            local function small(t)
+                return string.format('<font size="9" color="%s">%s</font>', dim, t)
             end
-        end))
+
+            rich = string.format(
+                '<b>game<font color="%s">sense</font></b>   <font color="%s"><b>%s</b></font> %s   <font color="%s"><b>%s</b></font> %s   %s',
+                hex(Theme.Accent), yellow, fps, small("FPS"), yellow, ping, small("PING"), os.date("%H:%M:%S")
+            )
+        else
+            -- custom template: same placeholders as before
+            rich = (wmTemplate:gsub("{(%w+)}", function(k)
+                k = k:lower()
+                if k == "fps" then return tostring(math.floor(fpsAvg + 0.5))
+                elseif k == "ping" then return tostring(pingMs())
+                elseif k == "time" then return os.date("%H:%M:%S")
+                elseif k == "name" then return Players.LocalPlayer and Players.LocalPlayer.Name or "player"
+                end
+            end))
+        end
+
+        wmText.Text = rich
+        wmShadow.Text = (rich:gsub("<[^>]*>", "")) -- the shadow is plain text, so strip the tags
     end
+
+    -- "sense" follows the menu accent colour
+    onAccent(function() renderWm() end)
 
     local tabBg = new("ImageLabel", {
         Name = "TabTexture",
