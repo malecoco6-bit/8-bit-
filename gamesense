@@ -7,10 +7,14 @@ local RunService       = game:GetService("RunService")
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
 
--- Library:SetFontFile("verdana.ttf", "verdanab.ttf") yourself before CreateWindow.
 Library.FontFile     = "verdana.ttf"
 Library.FontFileBold = "verdanab.ttf"
 Library.FontFace     = nil
+
+Library.FontURLs = {
+    Regular = "https://raw.githubusercontent.com/adrienverge/copr-some-nice-fonts/master/Verdana.ttf",
+    Bold    = nil, -- no bold file available; stays regular-only
+}
 
 function Library:SetFontFile(regularFile, boldFile)
     regularFile = regularFile or Library.FontFile
@@ -30,6 +34,45 @@ function Library:SetFontFile(regularFile, boldFile)
         Library.FontFace = Font.new(getcustomasset(fam), Enum.FontWeight.Regular, Enum.FontStyle.Normal)
     end)
     return ok and Library.FontFace ~= nil
+end
+
+local function getHttpFn()
+    return (syn and syn.request)
+        or http_request
+        or request
+        or (fluxus and fluxus.request)
+        or function(opts)
+            return { Body = game:HttpGet(opts.Url), StatusCode = 200 }
+        end
+end
+
+function Library:EnsureFont(urls)
+    urls = urls or Library.FontURLs
+    if not (writefile and isfile and getcustomasset) then
+        return false
+    end
+    if Library.FontFace then
+        return true
+    end
+
+    local function ensureFile(path, url)
+        if isfile(path) then return true end
+        local httpFn = getHttpFn()
+        local ok, res = pcall(httpFn, { Url = url, Method = "GET" })
+        if not ok or not res or not res.Body or #res.Body < 100 then
+            return false
+        end
+        local okWrite = pcall(writefile, path, res.Body)
+        return okWrite and isfile(path)
+    end
+
+    local regOk = ensureFile(Library.FontFile, urls.Regular)
+    if not regOk then
+        return false
+    end
+    local boldOk = urls.Bold and ensureFile(Library.FontFileBold, urls.Bold)
+
+    return Library:SetFontFile(Library.FontFile, boldOk and Library.FontFileBold or nil)
 end
 
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
@@ -687,9 +730,8 @@ function Library:CreateWindow(cfg)
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
-    -- try to load Verdana automatically if it hasn't been loaded yet
     if not Library.FontFace then
-        pcall(function() Library:SetFontFile() end)
+        pcall(function() Library:EnsureFont() end)
     end
 
     local gui = new("ScreenGui", {
