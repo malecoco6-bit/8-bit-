@@ -75,53 +75,32 @@ function Library:EnsureFont(urls)
     return Library:SetFontFile(Library.FontFile, boldOk and Library.FontFileBold or nil)
 end
 
--- tab icons (same order as the menu): Rage, AntiAim, Visuals, Legit, Misc, Skins, Players, Config, Cloud
-Library.IconIds = {
-	Rage = "rbxassetid://91357898935684",
-	AntiAim = "rbxassetid://128464472337573",
-	Legit = "rbxassetid://96097469307188",
-	Visuals = "rbxassetid://113618528113927",
-	Misc = "rbxassetid://86108350240142",
-	Skins = "rbxassetid://71807267392939",
-	Players = "rbxassetid://98810777164089",
-	Config = "rbxassetid://130303073876928",
-	Cloud = "rbxassetid://135674802022287",
-}
-local IconIds = Library.IconIds
-local ICONS = {
-	IconIds.Rage, IconIds.AntiAim, IconIds.Visuals, IconIds.Legit, IconIds.Misc,
-	IconIds.Skins, IconIds.Players, IconIds.Config, IconIds.Cloud,
-}
+local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
--- every name a tab may use for an icon (case-insensitive) -> key in IconIds
 local ICON_NAMES = {
-	rage = "Rage", headshot = "Rage", ragebot = "Rage",
-	antiaim = "AntiAim", ["anti-aim"] = "AntiAim", ["anti aim"] = "AntiAim", aa = "AntiAim", antiaimbot = "AntiAim",
-	legit = "Legit", crosshair = "Legit", aim = "Legit",
-	visuals = "Visuals", visual = "Visuals", sun = "Visuals", esp = "Visuals",
-	misc = "Misc", gear = "Misc", settings = "Misc",
-	skins = "Skins", skin = "Skins", karambit = "Skins", knife = "Skins",
-	players = "Players", player = "Players", person = "Players",
-	config = "Config", configs = "Config", save = "Config",
-	cloud = "Cloud", download = "Cloud",
+    headshot = 1, rage = 1,
+    crosshair = 2, legit = 2,
+    visuals = 3, sun = 3,
+    gear = 4, settings = 4, misc = 4,
+    karambit = 5, knife = 5, skins = 5,
+    config = 6, save = 6,
 }
 Library.IconNames = ICON_NAMES
 
 local function resolveIcon(icon)
-	if type(icon) == "string" then
-		local key = ICON_NAMES[icon:lower()] or (IconIds[icon] and icon)
-		if key then return IconIds[key] end
-	end
-	if type(icon) == "number" and ICONS[icon] then
-		icon = ICONS[icon]
-	end
-	if icon == nil then return nil end
-	icon = tostring(icon)
-	if icon:match("^%d+$") then
-		icon = "rbxassetid://" .. icon
-	end
-	return icon
+    if type(icon) == "string" and ICON_NAMES[icon:lower()] then
+        icon = ICON_NAMES[icon:lower()]
+    end
+    if type(icon) == "number" and ICONS[icon] then
+        icon = ICONS[icon]
+    end
+    if icon == nil then return nil end
+    icon = tostring(icon)
+    if icon:match("^%d+$") then
+        icon = "rbxassetid://" .. icon
+    end
+    return icon
 end
 
 local Theme = {
