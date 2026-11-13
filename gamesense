@@ -10,10 +10,11 @@ Library.ConfigFolder = "gamesense_configs"
 Library.FontFile     = "verdana.ttf"
 Library.FontFileBold = "verdanab.ttf"
 Library.FontFace     = nil
+Library.FontFaceBold = nil
 
 Library.FontURLs = {
     Regular = "https://raw.githubusercontent.com/adrienverge/copr-some-nice-fonts/master/Verdana.ttf",
-    Bold    = nil, -- no bold file available; stays regular-only
+    Bold    = "https://raw.githubusercontent.com/malecoco6-bit/8-bit-/main/verdanab.ttf",
 }
 
 function Library:SetFontFile(regularFile, boldFile)
@@ -32,6 +33,7 @@ function Library:SetFontFile(regularFile, boldFile)
         local fam = "gamesense_verdana.json"
         writefile(fam, HttpService:JSONEncode({ name = "Verdana", faces = faces }))
         Library.FontFace = Font.new(getcustomasset(fam), Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        Library.FontFaceBold = Font.new(getcustomasset(fam), Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     end)
     return ok and Library.FontFace ~= nil
 end
@@ -123,13 +125,13 @@ local Theme = {
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
     -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
-    -- If verdana.ttf is found, every text object is switched to it automatically.
+    -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
     Font     = Enum.Font.Arial,
-    FontBold = Enum.Font.Arial,
+    FontBold = Enum.Font.ArialBold,
     TextSize = 12,
 
     Texture = "rbxassetid://8547666218",
-    TabBase = Color3.fromRGB(14, 14, 14),
+    TabBase = Color3.fromRGB(12, 12, 12),
     TabColor = Color3.fromRGB(8, 8, 8),
     TextureBase = Color3.fromRGB(20, 20, 20),
     TextureColor = Color3.fromRGB(12, 12, 12),
@@ -528,13 +530,15 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     stroke(box, Theme.Outline, 1)
     shine(box, 190)
 
-    local W = 186
-    local H = hasAlpha and 190 or 170
+    local PAD, SVS, HUEW = 4, 150, 12
+    local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
+    local W = PAD * 2 + FULLW
+    local H = PAD + SVS + 4 + (hasAlpha and 12 or 0) + 8 + PAD
     local pop = makePanel(ctx, W, H)
 
     local sv = new("Frame", {
-        Position = UDim2.fromOffset(8, 8),
-        Size = UDim2.fromOffset(150, 150),
+        Position = UDim2.fromOffset(PAD, PAD),
+        Size = UDim2.fromOffset(SVS, SVS),
         BackgroundColor3 = Color3.fromHSV(h, 1, 1),
         BorderSizePixel = 0,
         ZIndex = 1,
@@ -557,15 +561,16 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = sv,
     })
     new("UIGradient", { Transparency = NumberSequence.new(1, 0), Rotation = 90, Parent = black })
+    -- ring cursor
     local svCursor = new("Frame", {
-        Size = UDim2.fromOffset(6, 6),
+        Size = UDim2.fromOffset(7, 7),
         AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = Color3.new(1, 1, 1),
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ZIndex = 5,
         Parent = sv,
     })
-    stroke(svCursor, Theme.Outline, 1) -- square dot: no UICorner
+    stroke(svCursor, Color3.fromRGB(235, 235, 235), 1)
     local svHit = new("TextButton", {
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
@@ -576,8 +581,8 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     })
 
     local hueBar = new("TextButton", {
-        Position = UDim2.fromOffset(166, 8),
-        Size = UDim2.fromOffset(12, 150),
+        Position = UDim2.fromOffset(PAD + SVS + 4, PAD),
+        Size = UDim2.fromOffset(HUEW, SVS),
         BackgroundColor3 = Color3.new(1, 1, 1),
         BorderSizePixel = 0,
         Text = "",
@@ -600,7 +605,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = hueBar,
     })
     local hueCursor = new("Frame", {
-        Size = UDim2.fromOffset(16, 2),
+        Size = UDim2.new(1, 2, 0, 2),
         AnchorPoint = Vector2.new(0.5, 0.5),
         BackgroundColor3 = Color3.new(1, 1, 1),
         BorderSizePixel = 0,
@@ -610,26 +615,27 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     stroke(hueCursor, Theme.Outline, 1)
 
     local alphaBar, alphaFill, alphaCursor
+    local nextY = PAD + SVS + 4
     if hasAlpha then
         alphaBar = new("TextButton", {
-            Position = UDim2.fromOffset(8, 166),
-            Size = UDim2.fromOffset(150, 10),
+            Position = UDim2.fromOffset(PAD, nextY),
+            Size = UDim2.fromOffset(FULLW, 8),
             BackgroundColor3 = Color3.fromRGB(70, 70, 70),
             BorderSizePixel = 0,
             Text = "",
             AutoButtonColor = false,
+            ClipsDescendants = true,
             ZIndex = 1,
             Parent = pop,
         })
         stroke(alphaBar, Theme.Outline, 1)
-        -- gamesense style transparency checkerboard (5px squares) behind the colour fade
-        for cx = 0, 29 do
+        -- transparency checkerboard (4px squares) behind the colour fade
+        for cx = 0, math.ceil(FULLW / 4) - 1 do
             for cy = 0, 1 do
-                local light = (cx + cy) % 2 == 0
                 new("Frame", {
-                    Position = UDim2.fromOffset(cx * 5, cy * 5),
-                    Size = UDim2.fromOffset(5, 5),
-                    BackgroundColor3 = light and Color3.fromRGB(205, 205, 205) or Color3.fromRGB(140, 140, 140),
+                    Position = UDim2.fromOffset(cx * 4, cy * 4),
+                    Size = UDim2.fromOffset(4, 4),
+                    BackgroundColor3 = ((cx + cy) % 2 == 0) and Color3.fromRGB(205, 205, 205) or Color3.fromRGB(140, 140, 140),
                     BorderSizePixel = 0,
                     ZIndex = 1,
                     Parent = alphaBar,
@@ -645,7 +651,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         })
         new("UIGradient", { Transparency = NumberSequence.new(1, 0), Parent = alphaFill })
         alphaCursor = new("Frame", {
-            Size = UDim2.fromOffset(2, 14),
+            Size = UDim2.new(0, 2, 1, 2),
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundColor3 = Color3.new(1, 1, 1),
             BorderSizePixel = 0,
@@ -653,11 +659,25 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
             Parent = alphaBar,
         })
         stroke(alphaCursor, Theme.Outline, 1)
+        nextY = nextY + 12
     end
+
+    -- solid preview bar at the bottom
+    local preview = new("Frame", {
+        Position = UDim2.fromOffset(PAD, nextY),
+        Size = UDim2.fromOffset(FULLW, 8),
+        BackgroundColor3 = color,
+        BorderSizePixel = 0,
+        ZIndex = 1,
+        Parent = pop,
+    })
+    stroke(preview, Theme.Outline, 1)
+    shine(preview, 205)
 
     local function refresh(fire)
         color = Color3.fromHSV(h, s, v)
         box.BackgroundColor3 = color
+        preview.BackgroundColor3 = color
         sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
         svCursor.Position = UDim2.fromScale(s, 1 - v)
         hueCursor.Position = UDim2.fromScale(0.5, h)
@@ -759,19 +779,29 @@ function Library:CreateWindow(cfg)
     local function track(c) conns[#conns + 1] = c return c end
 
     -- ── apply the custom font to every text object (including ones created later) ──
+    -- Elements that asked for Enum.Font.ArialBold get the Verdana Bold face, everything else gets Regular.
     if Library.FontFace then
         local fontFace = Library.FontFace
+        local boldFace = Library.FontFaceBold or fontFace
         local busy = {}
+        local wantBold = {}
         local function skin(d)
             if busy[d] then return end
             busy[d] = true
-            pcall(function() d.FontFace = fontFace end)
+            pcall(function() d.FontFace = wantBold[d] and boldFace or fontFace end)
             busy[d] = nil
         end
         local function hookText(d)
             if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                wantBold[d] = (d.Font == Enum.Font.ArialBold)
                 skin(d)
                 d:GetPropertyChangedSignal("Font"):Connect(function()
+                    if busy[d] then return end
+                    if d.Font == Enum.Font.ArialBold then
+                        wantBold[d] = true
+                    elseif d.Font == Enum.Font.Arial or d.Font == Enum.Font.SourceSans then
+                        wantBold[d] = false
+                    end
                     task.defer(skin, d)
                 end)
             end
@@ -793,14 +823,15 @@ function Library:CreateWindow(cfg)
     })
     stroke(outer, Theme.Outline, 1)
 
+    -- thicker (2px) grey frame
     local mid = new("Frame", {
-        Size = UDim2.new(1, -2, 1, -2),
-        Position = UDim2.fromOffset(1, 1),
+        Size = UDim2.new(1, -4, 1, -4),
+        Position = UDim2.fromOffset(2, 2),
         BackgroundColor3 = Theme.Background,
         BorderSizePixel = 0,
         Parent = outer,
     })
-    stroke(mid, Theme.Frame, 1)
+    stroke(mid, Theme.Frame, 2)
 
     local inner = new("Frame", {
         Size = UDim2.new(1, -2, 1, -2),
@@ -986,6 +1017,16 @@ function Library:CreateWindow(cfg)
         TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
         ZIndex = 2,
         Parent = inner,
+    })
+    -- thin divider on the right edge of the tab column
+    new("Frame", {
+        Name = "TabDivider",
+        Size = UDim2.new(0, 1, 1, 0),
+        Position = UDim2.new(1, -1, 0, 0),
+        BackgroundColor3 = Theme.Border,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = tabBg,
     })
 
     local content = new("Frame", {
@@ -1255,30 +1296,30 @@ function Library:CreateWindow(cfg)
     function Window:GetAccent() return Theme.Accent end
 
     function Window:Notify(text, duration, color)
-    duration = duration or 4
-    local f = new("Frame", {
-        AutomaticSize = Enum.AutomaticSize.XY,
-        Size = UDim2.fromOffset(0, 0),
-        BackgroundColor3 = OVERLAY_BG,
-        BorderSizePixel = 0,
-        ZIndex = 3,
-        Parent = notifyLayer,
-    })
-    new("UIGradient", { Transparency = OVERLAY_FADE, Parent = f })
+        duration = duration or 4
+        local f = new("Frame", {
+            AutomaticSize = Enum.AutomaticSize.XY,
+            Size = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = OVERLAY_BG,
+            BorderSizePixel = 0,
+            ZIndex = 3,
+            Parent = notifyLayer,
+        })
+        new("UIGradient", { Transparency = OVERLAY_FADE, Parent = f })
 
-    local l, sh = label(f, tostring(text), {
-        AutomaticSize = Enum.AutomaticSize.XY,
-        Size = UDim2.fromOffset(0, 0),
-        Font = OVERLAY_FONT,
-        TextSize = OVERLAY_SIZE,
-        ZIndex = 4,
-    })
-    padLabel(l, sh, {
-        PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
-        PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 5),
-    })
-    task.delay(duration, function() f:Destroy() end)
-end
+        local l, sh = label(f, tostring(text), {
+            AutomaticSize = Enum.AutomaticSize.XY,
+            Size = UDim2.fromOffset(0, 0),
+            Font = OVERLAY_FONT,
+            TextSize = OVERLAY_SIZE,
+            ZIndex = 4,
+        })
+        padLabel(l, sh, {
+            PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
+            PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 5),
+        })
+        task.delay(duration, function() f:Destroy() end)
+    end
 
     function Window:SelectTab(which)
         for i, t in ipairs(Window.Tabs) do
@@ -1417,7 +1458,7 @@ end
             Parent = tabBar,
         })
 
-        -- unselected look: same solid base + pattern as the tab bar, transparency 0
+        -- unselected look: same solid base + pattern as the tab bar
         local idleBox = new("ImageLabel", {
             Name = "IdleTexture",
             Size = UDim2.fromScale(1, 1),
@@ -1432,9 +1473,10 @@ end
             ZIndex = 4,
             Parent = btn,
         })
+        -- selected look: lighter page colour, overlaps the divider + page border so it merges into the page
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
-            Size = UDim2.new(1, 1, 1, 0),
+            Size = UDim2.new(1, 2, 1, 0),
             Position = UDim2.fromOffset(0, 0),
             BackgroundColor3 = Theme.TextureBase,
             BackgroundTransparency = 0,
