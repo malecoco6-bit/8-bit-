@@ -124,15 +124,20 @@ local Theme = {
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
+    -- tabs: plain solid colours, fully opaque (no texture, no transparency)
+    TabIdle     = Color3.fromRGB(12, 12, 12),   -- unselected tab + the tab column
+    TabSelected = Color3.fromRGB(20, 20, 20),   -- selected tab (same colour as the page)
+    TabLine     = Color3.fromRGB(54, 54, 54),   -- thin lines above / below the selected tab
+    TabSep      = Color3.fromRGB(22, 22, 22),   -- faint line between unselected tabs
+
     -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
     -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
     Font     = Enum.Font.Arial,
     FontBold = Enum.Font.ArialBold,
     TextSize = 12,
 
+    -- page background texture
     Texture = "rbxassetid://8547666218",
-    TabBase = Color3.fromRGB(12, 12, 12),
-    TabColor = Color3.fromRGB(8, 8, 8),
     TextureBase = Color3.fromRGB(20, 20, 20),
     TextureColor = Color3.fromRGB(12, 12, 12),
     TextureTile = 8,
@@ -561,16 +566,15 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = sv,
     })
     new("UIGradient", { Transparency = NumberSequence.new(1, 0), Rotation = 90, Parent = black })
-    -- dot cursor
+    -- dragger: a small square dot (no UICorner)
     local svCursor = new("Frame", {
-        Size = UDim2.fromOffset(5, 5),
+        Size = UDim2.fromOffset(4, 4),
         AnchorPoint = Vector2.new(0.5, 0.5),
         BackgroundColor3 = Color3.new(1, 1, 1),
         BorderSizePixel = 0,
         ZIndex = 5,
         Parent = sv,
     })
-    new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = svCursor })
     stroke(svCursor, Color3.new(0, 0, 0), 1)
     local svHit = new("TextButton", {
         Size = UDim2.fromScale(1, 1),
@@ -1005,18 +1009,14 @@ function Library:CreateWindow(cfg)
     -- "sense" follows the menu accent colour
     onAccent(function() renderWm() end)
 
-    local tabBg = new("ImageLabel", {
-        Name = "TabTexture",
+    -- tab column: solid colour, fully opaque
+    local tabBg = new("Frame", {
+        Name = "TabColumn",
         Size = UDim2.new(0, TAB_W, 1, -TOP),
         Position = UDim2.fromOffset(0, TOP),
-        BackgroundColor3 = Theme.TabBase,
+        BackgroundColor3 = Theme.TabIdle,
         BackgroundTransparency = 0,
         BorderSizePixel = 0,
-        Image = Theme.Texture,
-        ImageColor3 = Theme.TabColor,
-        ImageTransparency = 0,
-        ScaleType = Enum.ScaleType.Tile,
-        TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
         ZIndex = 2,
         Parent = inner,
     })
@@ -1448,10 +1448,10 @@ function Library:CreateWindow(cfg)
         local name = opts.Name or "Tab"
         local icon = resolveIcon(opts.Icon ~= nil and opts.Icon or ICONS[#Window.Tabs + 1])
 
+        -- click area only (the coloured boxes below are solid and opaque)
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
-            BackgroundColor3 = Theme.TabBase,
-            BackgroundTransparency = 0, -- tabs are fully opaque
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
             Text = "",
             AutoButtonColor = false,
@@ -1459,9 +1459,6 @@ function Library:CreateWindow(cfg)
             ZIndex = 4,
             Parent = tabBar,
         })
-
-        local IDLE_LINE = Color3.fromRGB(34, 34, 34)
-        local SEL_LINE  = Color3.fromRGB(54, 54, 54)
 
         local function hline(parent, atBottom, color)
             return new("Frame", {
@@ -1474,42 +1471,34 @@ function Library:CreateWindow(cfg)
             })
         end
 
-        -- unselected: dark tab boxed in by thin lines, with the divider on its right edge
-        -- unselected: plain dark tab
-local idleBox = new("ImageLabel", {
-    Name = "IdleTexture",
-    Size = UDim2.fromScale(1, 1),
-    BackgroundColor3 = Theme.TabBase,
-    BackgroundTransparency = 0,
-    BorderSizePixel = 0,
-    Image = Theme.Texture,
-    ImageColor3 = Theme.TabColor,
-    ImageTransparency = 0,
-    ScaleType = Enum.ScaleType.Tile,
-    TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
-    ZIndex = 4,
-    Parent = btn,
-})
+        -- unselected: solid dark tab with a faint line under it
+        -- (1px short on the right so the column divider stays visible)
+        local idleBox = new("Frame", {
+            Name = "Idle",
+            Size = UDim2.new(1, -1, 1, 0),
+            BackgroundColor3 = Theme.TabIdle,
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            ZIndex = 4,
+            Parent = btn,
+        })
+        hline(idleBox, true, Theme.TabSep)
 
--- selected: page-colored, sticks out over the divider so it opens into the page
-local selBox = new("ImageLabel", {
-    Name = "SelectedTexture",
-    Size = UDim2.new(1, 2, 1, 0),
-    Position = UDim2.fromOffset(0, 0),
-    BackgroundColor3 = Theme.TextureBase,
-    BackgroundTransparency = 0,
-    BorderSizePixel = 0,
-    Image = Theme.Texture,
-    ImageColor3 = Theme.TextureColor,
-    ImageTransparency = 0,
-    ScaleType = Enum.ScaleType.Tile,
-    TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
-    Visible = false,
-    ZIndex = 4,
-    Parent = btn,
- })
-        hline(selBox, false, SEL_LINE)
-        hline(selBox, true, SEL_LINE)
+        -- selected: solid page colour, thin line above and below,
+        -- sticks out over the divider so it opens into the page
+        local selBox = new("Frame", {
+            Name = "Selected",
+            Size = UDim2.new(1, 2, 1, 0),
+            Position = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = Theme.TabSelected,
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            Visible = false,
+            ZIndex = 4,
+            Parent = btn,
+        })
+        hline(selBox, false, Theme.TabLine)
+        hline(selBox, true, Theme.TabLine)
 
         local img
         if icon then
