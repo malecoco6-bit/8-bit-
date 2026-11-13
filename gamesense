@@ -124,11 +124,9 @@ local Theme = {
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    -- tabs: plain solid colours, fully opaque (no texture, no transparency)
-    TabIdle     = Color3.fromRGB(12, 12, 12),   -- unselected tab + the tab column
-    TabSelected = Color3.fromRGB(20, 20, 20),   -- selected tab (same colour as the page)
-    TabLine     = Color3.fromRGB(54, 54, 54),   -- thin lines above / below the selected tab
-    TabSep      = Color3.fromRGB(22, 22, 22),   -- faint line between unselected tabs
+    -- tabs: plain solid colours, no lines
+    TabIdle     = Color3.fromRGB(12, 12, 12),   -- the tab column (darker)
+    TabSelected = Color3.fromRGB(20, 20, 20),   -- selected tab (same colour as the page / TextureBase)
 
     -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
     -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
@@ -762,9 +760,9 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 90
-    local TAB_H = 86
-    local TAB_ICON = 58   -- icon size inside each tab
+    local TAB_W = 70      -- tab column width (was 90)
+    local TAB_H = 64      -- height of each tab (was 86)
+    local TAB_ICON = 36   -- icon size inside each tab (was 58)
     local TAB_TOP = 26
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
@@ -1020,17 +1018,8 @@ function Library:CreateWindow(cfg)
         ZIndex = 2,
         Parent = inner,
     })
-    -- thin divider on the right edge of the tab column
-    new("Frame", {
-        Name = "TabDivider",
-        Size = UDim2.new(0, 1, 1, 0),
-        Position = UDim2.new(1, -1, 0, 0),
-        BackgroundColor3 = Theme.Border,
-        BorderSizePixel = 0,
-        ZIndex = 3,
-        Parent = tabBg,
-    })
 
+    -- page area (no border line between the tabs and the page)
     local content = new("Frame", {
         Size = UDim2.new(1, -TAB_W, 1, -TOP),
         Position = UDim2.fromOffset(TAB_W, TOP),
@@ -1040,7 +1029,6 @@ function Library:CreateWindow(cfg)
         ZIndex = 3,
         Parent = inner,
     })
-    stroke(content, Theme.Border, 1)
 
     new("ImageLabel", {
         Name = "PageTexture",
@@ -1448,7 +1436,7 @@ function Library:CreateWindow(cfg)
         local name = opts.Name or "Tab"
         local icon = resolveIcon(opts.Icon ~= nil and opts.Icon or ICONS[#Window.Tabs + 1])
 
-        -- click area only (the coloured boxes below are solid and opaque)
+        -- click area only
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
             BackgroundTransparency = 1,
@@ -1460,35 +1448,21 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        local function hline(parent, atBottom, color)
-            return new("Frame", {
-                Size = UDim2.new(1, 0, 0, 1),
-                Position = atBottom and UDim2.new(0, 0, 1, -1) or UDim2.fromOffset(0, 0),
-                BackgroundColor3 = color,
-                BorderSizePixel = 0,
-                ZIndex = 5,
-                Parent = parent,
-            })
-        end
-
-        -- unselected: solid dark tab with a faint line under it
-        -- (1px short on the right so the column divider stays visible)
+        -- unselected: fully transparent, you just see the dark tab column (no lines)
         local idleBox = new("Frame", {
             Name = "Idle",
-            Size = UDim2.new(1, -1, 1, 0),
-            BackgroundColor3 = Theme.TabIdle,
-            BackgroundTransparency = 0,
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
             ZIndex = 4,
             Parent = btn,
         })
-        hline(idleBox, true, Theme.TabSep)
 
-        -- selected: solid page colour, thin line above and below,
-        -- sticks out over the divider so it opens into the page
+        -- selected: same colour as the page, sticks out 1px so it opens into the page
+        -- (set BackgroundTransparency to 1 if you want it fully see-through instead)
         local selBox = new("Frame", {
             Name = "Selected",
-            Size = UDim2.new(1, 2, 1, 0),
+            Size = UDim2.new(1, 1, 1, 0),
             Position = UDim2.fromOffset(0, 0),
             BackgroundColor3 = Theme.TabSelected,
             BackgroundTransparency = 0,
@@ -1497,8 +1471,6 @@ function Library:CreateWindow(cfg)
             ZIndex = 4,
             Parent = btn,
         })
-        hline(selBox, false, Theme.TabLine)
-        hline(selBox, true, Theme.TabLine)
 
         local img
         if icon then
