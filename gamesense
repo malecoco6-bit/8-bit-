@@ -758,9 +758,9 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 76
-    local TAB_H = 74
-    local TAB_ICON = 50   -- icon size inside each tab
+    local TAB_W = 90
+    local TAB_H = 86
+    local TAB_ICON = 58   -- icon size inside each tab
     local TAB_TOP = 26
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
@@ -1475,48 +1475,39 @@ function Library:CreateWindow(cfg)
         end
 
         -- unselected: dark tab boxed in by thin lines, with the divider on its right edge
-        local idleBox = new("ImageLabel", {
-            Name = "IdleTexture",
-            Size = UDim2.fromScale(1, 1),
-            BackgroundColor3 = Theme.TabBase,
-            BackgroundTransparency = 0,
-            BorderSizePixel = 0,
-            Image = Theme.Texture,
-            ImageColor3 = Theme.TabColor,
-            ImageTransparency = 0,
-            ScaleType = Enum.ScaleType.Tile,
-            TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
-            ZIndex = 4,
-            Parent = btn,
-        })
-        hline(idleBox, false, IDLE_LINE)
-        hline(idleBox, true, IDLE_LINE)
-        new("Frame", {
-            Size = UDim2.new(0, 1, 1, 0),
-            Position = UDim2.new(1, -1, 0, 0),
-            BackgroundColor3 = Theme.Border,
-            BorderSizePixel = 0,
-            ZIndex = 5,
-            Parent = idleBox,
-        })
+        -- unselected: plain dark tab
+local idleBox = new("ImageLabel", {
+    Name = "IdleTexture",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Theme.TabBase,
+    BackgroundTransparency = 0,
+    BorderSizePixel = 0,
+    Image = Theme.Texture,
+    ImageColor3 = Theme.TabColor,
+    ImageTransparency = 0,
+    ScaleType = Enum.ScaleType.Tile,
+    TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
+    ZIndex = 4,
+    Parent = btn,
+})
 
-        -- selected: page-colored, brighter lines, sticks out over the divider so it opens into the page
-        local selBox = new("ImageLabel", {
-            Name = "SelectedTexture",
-            Size = UDim2.new(1, 2, 1, 0),
-            Position = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = Theme.TextureBase,
-            BackgroundTransparency = 0,
-            BorderSizePixel = 0,
-            Image = Theme.Texture,
-            ImageColor3 = Theme.TextureColor,
-            ImageTransparency = 0,
-            ScaleType = Enum.ScaleType.Tile,
-            TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
-            Visible = false,
-            ZIndex = 4,
-            Parent = btn,
-        })
+-- selected: page-colored, sticks out over the divider so it opens into the page
+local selBox = new("ImageLabel", {
+    Name = "SelectedTexture",
+    Size = UDim2.new(1, 2, 1, 0),
+    Position = UDim2.fromOffset(0, 0),
+    BackgroundColor3 = Theme.TextureBase,
+    BackgroundTransparency = 0,
+    BorderSizePixel = 0,
+    Image = Theme.Texture,
+    ImageColor3 = Theme.TextureColor,
+    ImageTransparency = 0,
+    ScaleType = Enum.ScaleType.Tile,
+    TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
+    Visible = false,
+    ZIndex = 4,
+    Parent = btn,
+ })
         hline(selBox, false, SEL_LINE)
         hline(selBox, true, SEL_LINE)
 
