@@ -124,9 +124,8 @@ local Theme = {
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
-    -- tabs: plain solid colours, no lines
-    TabIdle     = Color3.fromRGB(12, 12, 12),   -- the tab column (darker)
-    TabSelected = Color3.fromRGB(20, 20, 20),   -- selected tab (same colour as the page / TextureBase)
+    -- the tab column (darker than the page)
+    TabIdle = Color3.fromRGB(12, 12, 12),
 
     -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
     -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
@@ -134,7 +133,7 @@ local Theme = {
     FontBold = Enum.Font.ArialBold,
     TextSize = 12,
 
-    -- page background texture
+    -- page background texture (the selected tab uses the same one)
     Texture = "rbxassetid://8547666218",
     TextureBase = Color3.fromRGB(20, 20, 20),
     TextureColor = Color3.fromRGB(12, 12, 12),
@@ -760,9 +759,9 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 70      -- tab column width (was 90)
-    local TAB_H = 64      -- height of each tab (was 86)
-    local TAB_ICON = 36   -- icon size inside each tab (was 58)
+    local TAB_W = 70      -- tab column width
+    local TAB_H = 64      -- height of each tab
+    local TAB_ICON = 36   -- icon size inside each tab
     local TAB_TOP = 26
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
@@ -1017,6 +1016,17 @@ function Library:CreateWindow(cfg)
         BorderSizePixel = 0,
         ZIndex = 2,
         Parent = inner,
+    })
+
+    -- thin divider on the right edge of the tab column (the selected tab covers it)
+    new("Frame", {
+        Name = "TabDivider",
+        Position = UDim2.new(1, -1, 0, 0),
+        Size = UDim2.new(0, 1, 1, 0),
+        BackgroundColor3 = Theme.Border,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = tabBg,
     })
 
     -- page area (no border line between the tabs and the page)
@@ -1448,7 +1458,7 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        -- unselected: fully transparent, you just see the dark tab column (no lines)
+        -- unselected: fully transparent, you just see the dark tab column
         local idleBox = new("Frame", {
             Name = "Idle",
             Size = UDim2.new(1, 0, 1, 0),
@@ -1458,46 +1468,65 @@ function Library:CreateWindow(cfg)
             Parent = btn,
         })
 
-        -- selected: same colour as the page, sticks out 1px so it opens into the page
-        -- (set BackgroundTransparency to 1 if you want it fully see-through instead)
-       local tabIndex = #Window.Tabs
+        -- selected: shows the SAME tiled texture as the page, lined up with it, so the tab
+        -- looks cut out of the page (gamesense style). Sticks out 1px so it opens into the page
+        -- and covers the divider.
+        local tabIndex = #Window.Tabs  -- 0-based position of this tab (it isn't inserted yet)
 
-      local selBox = new("Frame", {
-      Name = "Selected",
-      Size = UDim2.new(1, 1, 1, 0),
-      Position = UDim2.fromOffset(0, 0),
-      BackgroundColor3 = Theme.TextureBase,
-      BackgroundTransparency = 0,
-      BorderSizePixel = 0,
-      ClipsDescendants = true,
-      Visible = false,
-      ZIndex = 4,
-      Parent = btn,
-      })
+        local selBox = new("Frame", {
+            Name = "Selected",
+            Size = UDim2.new(1, 1, 1, 0),
+            Position = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = Theme.TextureBase,
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            ClipsDescendants = true,
+            Visible = false,
+            ZIndex = 4,
+            Parent = btn,
+        })
 
-do
-    local tile = Theme.TextureTile
-    -- page texture starts at x = TAB_W; shift left by a whole number of tiles
-    -- so the tile pattern still matches the page exactly
-    local xOff = TAB_W - tile * math.ceil(TAB_W / tile)
-    local yOff = -(TAB_TOP + tabIndex * TAB_H)   -- page texture origin, relative to this tab
+        do
+            local tile = Theme.TextureTile
+            -- page texture starts at x = TAB_W; shift left by a whole number of tiles
+            -- so the tile pattern still matches the page exactly
+            local xOff = TAB_W - tile * math.ceil(TAB_W / tile)
+            local yOff = -(TAB_TOP + tabIndex * TAB_H)   -- page texture origin, relative to this tab
 
-    new("ImageLabel", {
-        Name = "TabTexture",
-        Position = UDim2.fromOffset(xOff, yOff),
-        Size = UDim2.fromOffset(TAB_W + tile * 2, TAB_TOP + (tabIndex + 1) * TAB_H),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Image = Theme.Texture,
-        ImageColor3 = Theme.TextureColor,
-        ImageTransparency = Theme.TextureTransparency,
-        ScaleType = Enum.ScaleType.Tile,
-        TileSize = UDim2.fromOffset(tile, tile),
-        ZIndex = 5,
-        Parent = selBox,
-    })
-end
+            new("ImageLabel", {
+                Name = "TabTexture",
+                Position = UDim2.fromOffset(xOff, yOff),
+                Size = UDim2.fromOffset(TAB_W + tile * 2, TAB_TOP + (tabIndex + 1) * TAB_H),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                Image = Theme.Texture,
+                ImageColor3 = Theme.TextureColor,
+                ImageTransparency = Theme.TextureTransparency,
+                ScaleType = Enum.ScaleType.Tile,
+                TileSize = UDim2.fromOffset(tile, tile),
+                ZIndex = 5,
+                Parent = selBox,
+            })
 
+            -- dark lines on the top and bottom edges of the selected tab
+            new("Frame", {
+                Name = "TopLine",
+                Size = UDim2.new(1, 0, 0, 1),
+                BackgroundColor3 = Theme.Outline,
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                Parent = selBox,
+            })
+            new("Frame", {
+                Name = "BottomLine",
+                Position = UDim2.new(0, 0, 1, -1),
+                Size = UDim2.new(1, 0, 0, 1),
+                BackgroundColor3 = Theme.Outline,
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                Parent = selBox,
+            })
+        end
 
         local img
         if icon then
