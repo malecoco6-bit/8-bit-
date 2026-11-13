@@ -1460,17 +1460,44 @@ function Library:CreateWindow(cfg)
 
         -- selected: same colour as the page, sticks out 1px so it opens into the page
         -- (set BackgroundTransparency to 1 if you want it fully see-through instead)
-        local selBox = new("Frame", {
-            Name = "Selected",
-            Size = UDim2.new(1, 1, 1, 0),
-            Position = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = Theme.TabSelected,
-            BackgroundTransparency = 0,
-            BorderSizePixel = 0,
-            Visible = false,
-            ZIndex = 4,
-            Parent = btn,
-        })
+       local tabIndex = #Window.Tabs
+
+      local selBox = new("Frame", {
+      Name = "Selected",
+      Size = UDim2.new(1, 1, 1, 0),
+      Position = UDim2.fromOffset(0, 0),
+      BackgroundColor3 = Theme.TextureBase,
+      BackgroundTransparency = 0,
+      BorderSizePixel = 0,
+      ClipsDescendants = true,
+      Visible = false,
+      ZIndex = 4,
+      Parent = btn,
+      })
+
+do
+    local tile = Theme.TextureTile
+    -- page texture starts at x = TAB_W; shift left by a whole number of tiles
+    -- so the tile pattern still matches the page exactly
+    local xOff = TAB_W - tile * math.ceil(TAB_W / tile)
+    local yOff = -(TAB_TOP + tabIndex * TAB_H)   -- page texture origin, relative to this tab
+
+    new("ImageLabel", {
+        Name = "TabTexture",
+        Position = UDim2.fromOffset(xOff, yOff),
+        Size = UDim2.fromOffset(TAB_W + tile * 2, TAB_TOP + (tabIndex + 1) * TAB_H),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Image = Theme.Texture,
+        ImageColor3 = Theme.TextureColor,
+        ImageTransparency = Theme.TextureTransparency,
+        ScaleType = Enum.ScaleType.Tile,
+        TileSize = UDim2.fromOffset(tile, tile),
+        ZIndex = 5,
+        Parent = selBox,
+    })
+end
+
 
         local img
         if icon then
