@@ -519,7 +519,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     local alpha = 1
 
     local box = new("TextButton", {
-        Size = UDim2.fromOffset(16, 16),
+        Size = UDim2.fromOffset(17, 9),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
         Text = "",
@@ -528,6 +528,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = container,
     })
     stroke(box, Theme.Outline, 1)
+    shine(box, 190)
 
     local PAD, SVS, HUEW = 4, 150, 12
     local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
@@ -1447,7 +1448,8 @@ function Library:CreateWindow(cfg)
 
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
-            BackgroundTransparency = 1, -- transparent everywhere; only the icon chip below is solid
+            BackgroundColor3 = Theme.TabBase,
+            BackgroundTransparency = 0, -- tabs are fully opaque
             BorderSizePixel = 0,
             Text = "",
             AutoButtonColor = false,
@@ -1456,11 +1458,10 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        -- unselected look: a solid chip sits only behind the icon, rest of the tab stays see-through
+        -- unselected look: same solid base + pattern as the tab bar
         local idleBox = new("ImageLabel", {
             Name = "IdleTexture",
-            Size = UDim2.fromOffset(48, 48),
-            Position = UDim2.new(0.5, -24, 0.5, -24),
+            Size = UDim2.fromScale(1, 1),
             BackgroundColor3 = Theme.TabBase,
             BackgroundTransparency = 0,
             BorderSizePixel = 0,
@@ -1472,11 +1473,11 @@ function Library:CreateWindow(cfg)
             ZIndex = 4,
             Parent = btn,
         })
-        -- selected look: same icon-sized chip, lighter page colour
+        -- selected look: lighter page colour, overlaps the divider + page border so it merges into the page
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
-            Size = UDim2.fromOffset(48, 48),
-            Position = UDim2.new(0.5, -24, 0.5, -24),
+            Size = UDim2.new(1, 2, 1, 0),
+            Position = UDim2.fromOffset(0, 0),
             BackgroundColor3 = Theme.TextureBase,
             BackgroundTransparency = 0,
             BorderSizePixel = 0,
@@ -1489,8 +1490,6 @@ function Library:CreateWindow(cfg)
             ZIndex = 4,
             Parent = btn,
         })
-        stroke(selBox, Theme.Border, 1)
-
         new("Frame", {
             Size = UDim2.new(1, 0, 0, 1),
             Position = UDim2.fromOffset(0, 0),
@@ -1634,7 +1633,6 @@ function Library:CreateWindow(cfg)
                 Size = UDim2.fromOffset(0, 14),
                 AutomaticSize = Enum.AutomaticSize.X,
                 TextColor3 = Theme.Title,
-                Font = Theme.FontBold,
                 ZIndex = 7,
             })
             local function placeTitle()
