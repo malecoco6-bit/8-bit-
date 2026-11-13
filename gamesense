@@ -565,8 +565,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         ZIndex = 5,
         Parent = sv,
     })
-    new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = svCursor })
-    stroke(svCursor, Theme.Outline, 1)
+    stroke(svCursor, Theme.Outline, 1) -- square dot: no UICorner
     local svHit = new("TextButton", {
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
@@ -623,6 +622,20 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
             Parent = pop,
         })
         stroke(alphaBar, Theme.Outline, 1)
+        -- gamesense style transparency checkerboard (5px squares) behind the colour fade
+        for cx = 0, 29 do
+            for cy = 0, 1 do
+                local light = (cx + cy) % 2 == 0
+                new("Frame", {
+                    Position = UDim2.fromOffset(cx * 5, cy * 5),
+                    Size = UDim2.fromOffset(5, 5),
+                    BackgroundColor3 = light and Color3.fromRGB(205, 205, 205) or Color3.fromRGB(140, 140, 140),
+                    BorderSizePixel = 0,
+                    ZIndex = 1,
+                    Parent = alphaBar,
+                })
+            end
+        end
         alphaFill = new("Frame", {
             Size = UDim2.fromScale(1, 1),
             BackgroundColor3 = color,
@@ -968,7 +981,7 @@ function Library:CreateWindow(cfg)
         BorderSizePixel = 0,
         Image = Theme.Texture,
         ImageColor3 = Theme.TabColor,
-        ImageTransparency = Theme.TextureTransparency,
+        ImageTransparency = 0,
         ScaleType = Enum.ScaleType.Tile,
         TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
         ZIndex = 2,
@@ -1394,7 +1407,8 @@ end
 
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
-            BackgroundTransparency = 1,
+            BackgroundColor3 = Theme.TabBase,
+            BackgroundTransparency = 0, -- tabs are fully opaque
             BorderSizePixel = 0,
             Text = "",
             AutoButtonColor = false,
@@ -1403,6 +1417,21 @@ end
             Parent = tabBar,
         })
 
+        -- unselected look: same solid base + pattern as the tab bar, transparency 0
+        local idleBox = new("ImageLabel", {
+            Name = "IdleTexture",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundColor3 = Theme.TabBase,
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            Image = Theme.Texture,
+            ImageColor3 = Theme.TabColor,
+            ImageTransparency = 0,
+            ScaleType = Enum.ScaleType.Tile,
+            TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
+            ZIndex = 4,
+            Parent = btn,
+        })
         local selBox = new("ImageLabel", {
             Name = "SelectedTexture",
             Size = UDim2.new(1, 1, 1, 0),
@@ -1412,7 +1441,7 @@ end
             BorderSizePixel = 0,
             Image = Theme.Texture,
             ImageColor3 = Theme.TextureColor,
-            ImageTransparency = Theme.TextureTransparency,
+            ImageTransparency = 0,
             ScaleType = Enum.ScaleType.Tile,
             TileSize = UDim2.fromOffset(Theme.TextureTile, Theme.TextureTile),
             Visible = false,
@@ -1496,6 +1525,7 @@ end
         local function setSelected(on)
             page.Visible = on
             selBox.Visible = on
+            idleBox.Visible = not on
             tint(on and Theme.TabIconSelected or Theme.TabIcon)
         end
         Tab.SetSelected = setSelected
