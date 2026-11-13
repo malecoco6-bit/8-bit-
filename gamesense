@@ -1633,6 +1633,7 @@ function Library:CreateWindow(cfg)
                 Size = UDim2.fromOffset(0, 14),
                 AutomaticSize = Enum.AutomaticSize.X,
                 TextColor3 = Theme.Title,
+                Font = Theme.FontBold,
                 ZIndex = 7,
             })
             local function placeTitle()
