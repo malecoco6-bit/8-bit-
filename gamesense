@@ -1650,10 +1650,10 @@ function Library:CreateWindow(cfg)
         new("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 18),
+            Padding = UDim.new(0, 36),
             Parent = catList,
         })
-        new("UIPadding", { PaddingLeft = UDim.new(0, 22), PaddingTop = UDim.new(0, 18), Parent = catList })
+        new("UIPadding", { PaddingLeft = UDim.new(0, 29), PaddingTop = UDim.new(0, 11), Parent = catList })
 
         local Tab = { Page = page, Name = name }
 
@@ -2479,8 +2479,8 @@ function Library:CreateWindow(cfg)
         -- ───────── categories ─────────
         local categories = {}
 
-        local CAT_IDLE = Color3.fromRGB(80, 80, 80)
-        local CAT_SIZE = 26
+        local CAT_IDLE = Color3.fromRGB(120, 120, 120)
+        local CAT_SIZE = 30
 
         local function selectCategory(c)
             for _, o in ipairs(categories) do
