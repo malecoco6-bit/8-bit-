@@ -90,7 +90,34 @@ local ICON_NAMES = {
 }
 Library.IconNames = ICON_NAMES
 
+-- icons can also be a link to a .png (e.g. a raw GitHub link) or a local file in your executor's workspace.
+-- the png gets downloaded once and loaded with getcustomasset, so no Roblox upload / moderation is needed.
+local iconCache = {}
+local function fileIcon(src)
+    if iconCache[src] then return iconCache[src] end
+    if not (writefile and isfile and getcustomasset) then return nil end
+    local path = src
+    if src:match("^https?://") then
+        path = "gamesense_icon_" .. (src:gsub("[^%w]", ""):sub(-48)) .. ".png"
+        if not isfile(path) then
+            local ok, body = pcall(function() return game:HttpGet(src) end)
+            if not ok or type(body) ~= "string" or #body < 50 then return nil end
+            pcall(writefile, path, body)
+        end
+    end
+    if not isfile(path) then return nil end
+    local ok, asset = pcall(getcustomasset, path)
+    if ok and asset then
+        iconCache[src] = asset
+        return asset
+    end
+    return nil
+end
+
 local function resolveIcon(icon)
+    if type(icon) == "string" and (icon:match("^https?://") or icon:lower():match("%.png$")) then
+        return fileIcon(icon)
+    end
     if type(icon) == "string" and ICON_NAMES[icon:lower()] then
         icon = ICON_NAMES[icon:lower()]
     end
