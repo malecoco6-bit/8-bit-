@@ -1559,7 +1559,7 @@ function Library:CreateWindow(cfg)
             Parent = content,
         })
 
-        local CAT_H = 24
+        local CAT_H, PANE_TOP = 52, 66   -- category box height / where the columns start under it
 
         local function makeColumn(parent, xScale, xOff)
             local col = new("ScrollingFrame", {
@@ -1596,23 +1596,51 @@ function Library:CreateWindow(cfg)
 
         local defaultPane = makePane(0)
 
-        -- category bar (only shown once AddCategory is used)
+        -- category box (gamesense style: a titled box with icon-only buttons)
         local catBar = new("Frame", {
             Name = "Categories",
-            Size = UDim2.new(1, 0, 0, CAT_H),
-            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(24, 12),
+            Size = UDim2.new(1, -48, 0, CAT_H),
+            BackgroundColor3 = Theme.Section,
+            BorderSizePixel = 0,
             Visible = false,
             ZIndex = 5,
             Parent = page,
         })
-        new("Frame", {
-            Position = UDim2.new(0, 0, 1, -1),
-            Size = UDim2.new(1, 0, 0, 1),
-            BackgroundColor3 = Theme.Border,
-            BorderSizePixel = 0,
-            ZIndex = 5,
-            Parent = catBar,
+        local catTopRight
+        do
+            local function cline(x, y, w, h, ox, oy, ow, oh)
+                return new("Frame", {
+                    Position = UDim2.new(x, ox, y, oy),
+                    Size = UDim2.new(w, ow, h, oh),
+                    BackgroundColor3 = Theme.Border,
+                    BorderSizePixel = 0,
+                    ZIndex = 6,
+                    Parent = catBar,
+                })
+            end
+            cline(0, 0, 0, 1, 0, 0, 1, 0)
+            cline(1, 0, 0, 1, -1, 0, 1, 0)
+            cline(0, 1, 1, 0, 0, -1, 0, 1)
+            cline(0, 0, 0, 0, 0, 0, 8, 1)
+            catTopRight = cline(0, 0, 1, 0, 0, 0, 0, 1)
+        end
+        local catTitle = label(catBar, "Category", {
+            Position = UDim2.fromOffset(12, -7),
+            Size = UDim2.fromOffset(0, 14),
+            AutomaticSize = Enum.AutomaticSize.X,
+            TextColor3 = Theme.Title,
+            Font = Theme.FontBold,
+            ZIndex = 7,
         })
+        local function placeCatTitle()
+            local x = 12 + catTitle.TextBounds.X + 5
+            catTopRight.Position = UDim2.fromOffset(x, 0)
+            catTopRight.Size = UDim2.new(1, -x, 0, 1)
+        end
+        catTitle:GetPropertyChangedSignal("TextBounds"):Connect(placeCatTitle)
+        placeCatTitle()
+
         local catList = new("Frame", {
             Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1,
@@ -1622,11 +1650,10 @@ function Library:CreateWindow(cfg)
         new("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             SortOrder = Enum.SortOrder.LayoutOrder,
-            VerticalAlignment = Enum.VerticalAlignment.Center,
-            Padding = UDim.new(0, 2),
+            Padding = UDim.new(0, 18),
             Parent = catList,
         })
-        new("UIPadding", { PaddingLeft = UDim.new(0, 16), Parent = catList })
+        new("UIPadding", { PaddingLeft = UDim.new(0, 22), PaddingTop = UDim.new(0, 18), Parent = catList })
 
         local Tab = { Page = page, Name = name }
 
@@ -2452,14 +2479,14 @@ function Library:CreateWindow(cfg)
         -- ───────── categories ─────────
         local categories = {}
 
+        local CAT_IDLE = Color3.fromRGB(80, 80, 80)
+        local CAT_SIZE = 26
+
         local function selectCategory(c)
             for _, o in ipairs(categories) do
                 local on = (o == c)
                 o.Pane.frame.Visible = on
-                o.Underline.Visible = on
-                o.Text.TextColor3 = on and Theme.TabIconSelected or Theme.TextDim
-                o.Text.Font = on and Theme.FontBold or Theme.Font
-                if o.Icon then o.Icon.ImageColor3 = on and Theme.Accent or Theme.TextDim end
+                o.Tint(on and Theme.TabIconSelected or CAT_IDLE)
             end
             Tab.ActiveCategory = c
             closePopup()
@@ -2471,82 +2498,55 @@ function Library:CreateWindow(cfg)
                 catBar.Visible = true
             end
 
-            local pane = makePane(CAT_H)
+            local pane = makePane(PANE_TOP)
             pane.frame.Visible = false
 
-            local cbtn = new("TextButton", {
-                AutomaticSize = Enum.AutomaticSize.X,
-                Size = UDim2.new(0, 0, 1, 0),
-                BackgroundTransparency = 1,
-                Text = "",
-                AutoButtonColor = false,
-                LayoutOrder = #categories + 1,
-                ZIndex = 7,
-                Parent = catList,
-            })
-            new("UIListLayout", {
-                FillDirection = Enum.FillDirection.Horizontal,
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 5),
-                Parent = cbtn,
-            })
-            new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = cbtn })
-
-            local cicon
             local resolved = resolveIcon(catIcon)
+            local cbtn, tint
             if resolved then
-                cicon = new("ImageLabel", {
-                    Size = UDim2.fromOffset(14, 14),
+                cbtn = new("ImageButton", {
+                    Size = UDim2.fromOffset(CAT_SIZE, CAT_SIZE),
                     BackgroundTransparency = 1,
                     Image = resolved,
-                    ImageColor3 = Theme.TextDim,
-                    LayoutOrder = 1,
-                    ZIndex = 8,
-                    Parent = cbtn,
+                    ImageColor3 = CAT_IDLE,
+                    AutoButtonColor = false,
+                    LayoutOrder = #categories + 1,
+                    ZIndex = 7,
+                    Parent = catList,
                 })
+                tint = function(c) cbtn.ImageColor3 = c end
+            else
+                -- no icon given: fall back to a text button
+                cbtn = new("TextButton", {
+                    AutomaticSize = Enum.AutomaticSize.X,
+                    Size = UDim2.fromOffset(0, CAT_SIZE),
+                    BackgroundTransparency = 1,
+                    Text = catName,
+                    TextColor3 = CAT_IDLE,
+                    Font = Theme.Font,
+                    TextSize = Theme.TextSize,
+                    AutoButtonColor = false,
+                    LayoutOrder = #categories + 1,
+                    ZIndex = 7,
+                    Parent = catList,
+                })
+                tint = function(c) cbtn.TextColor3 = c end
             end
-            local ctext = label(cbtn, catName, {
-                NoShadow = true,
-                AutomaticSize = Enum.AutomaticSize.X,
-                Size = UDim2.new(0, 0, 1, 0),
-                TextColor3 = Theme.TextDim,
-                LayoutOrder = 2,
-                ZIndex = 8,
-            })
-            local underline = new("Frame", {
-                Position = UDim2.new(0, 0, 1, -1),
-                Size = UDim2.new(1, 0, 0, 1),
-                BackgroundColor3 = Theme.Accent,
-                BorderSizePixel = 0,
-                Visible = false,
-                ZIndex = 9,
-                Parent = cbtn,
-            })
-            onAccent(function()
-                underline.BackgroundColor3 = Theme.Accent
-                if cicon and Tab.ActiveCategory and Tab.ActiveCategory.Text == ctext then
-                    cicon.ImageColor3 = Theme.Accent
-                end
-            end)
 
-            local Category = { Name = catName, Pane = pane, Text = ctext, Icon = cicon, Underline = underline }
+            -- the category name shows as a tooltip when you hover the icon
+            ctx.addTip(cbtn).Text = catName
+
+            local Category = { Name = catName, Pane = pane, Button = cbtn, Tint = tint }
             function Category:AddSection(secName, side, height)
                 return buildSection(pane, catName, secName, side, height)
             end
             function Category:Select() selectCategory(Category) end
 
             cbtn.MouseEnter:Connect(function()
-                if Tab.ActiveCategory ~= Category then
-                    ctext.TextColor3 = Theme.TabIconHover
-                    if cicon then cicon.ImageColor3 = Theme.TabIconHover end
-                end
+                if Tab.ActiveCategory ~= Category then tint(Theme.TabIconHover) end
             end)
             cbtn.MouseLeave:Connect(function()
-                if Tab.ActiveCategory ~= Category then
-                    ctext.TextColor3 = Theme.TextDim
-                    if cicon then cicon.ImageColor3 = Theme.TextDim end
-                end
+                if Tab.ActiveCategory ~= Category then tint(CAT_IDLE) end
             end)
             cbtn.MouseButton1Click:Connect(function() selectCategory(Category) end)
 
