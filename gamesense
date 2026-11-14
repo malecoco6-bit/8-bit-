@@ -1559,7 +1559,9 @@ function Library:CreateWindow(cfg)
             Parent = content,
         })
 
-        local function makeColumn(xScale, xOff)
+        local CAT_H = 24
+
+        local function makeColumn(parent, xScale, xOff)
             local col = new("ScrollingFrame", {
                 Size = UDim2.new(0.5, -34, 1, -24),
                 Position = UDim2.new(xScale, xOff, 0, 12),
@@ -1570,7 +1572,7 @@ function Library:CreateWindow(cfg)
                 CanvasSize = UDim2.new(),
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 ZIndex = 4,
-                Parent = page,
+                Parent = parent,
             })
             new("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
@@ -1580,8 +1582,51 @@ function Library:CreateWindow(cfg)
             return col
         end
 
-        local left  = makeColumn(0, 24)
-        local right = makeColumn(0.5, 10)
+        -- a "pane" = one left + right column pair (every category gets its own)
+        local function makePane(top)
+            local f = new("Frame", {
+                Position = UDim2.fromOffset(0, top),
+                Size = UDim2.new(1, 0, 1, -top),
+                BackgroundTransparency = 1,
+                ZIndex = 4,
+                Parent = page,
+            })
+            return { frame = f, left = makeColumn(f, 0, 24), right = makeColumn(f, 0.5, 10) }
+        end
+
+        local defaultPane = makePane(0)
+
+        -- category bar (only shown once AddCategory is used)
+        local catBar = new("Frame", {
+            Name = "Categories",
+            Size = UDim2.new(1, 0, 0, CAT_H),
+            BackgroundTransparency = 1,
+            Visible = false,
+            ZIndex = 5,
+            Parent = page,
+        })
+        new("Frame", {
+            Position = UDim2.new(0, 0, 1, -1),
+            Size = UDim2.new(1, 0, 0, 1),
+            BackgroundColor3 = Theme.Border,
+            BorderSizePixel = 0,
+            ZIndex = 5,
+            Parent = catBar,
+        })
+        local catList = new("Frame", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            ZIndex = 6,
+            Parent = catBar,
+        })
+        new("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 2),
+            Parent = catList,
+        })
+        new("UIPadding", { PaddingLeft = UDim.new(0, 16), Parent = catList })
 
         local Tab = { Page = page, Name = name }
 
@@ -1614,8 +1659,9 @@ function Library:CreateWindow(cfg)
             setSelected(true)
         end
 
-        function Tab:AddSection(secName, side, height)
-            local parent = (side == "Right") and right or left
+        local function buildSection(pane, catName, secName, side, height)
+            local parent = (side == "Right") and pane.right or pane.left
+            local flagRoot = catName and (name .. "/" .. catName) or name
             local fixed = type(height) == "number"
 
             local holder = new("Frame", {
@@ -1730,7 +1776,7 @@ function Library:CreateWindow(cfg)
 
             local function reg(kind, text, obj)
                 if name == "Config" and secName ~= "Menu" then return end
-                register(name .. "/" .. secName .. "/" .. text, kind, obj)
+                register(flagRoot .. "/" .. secName .. "/" .. text, kind, obj)
             end
 
             local function vis(obj, frame)
@@ -2401,6 +2447,132 @@ function Library:CreateWindow(cfg)
             end
 
             return Section
+        end
+
+        -- ───────── categories ─────────
+        local categories = {}
+
+        local function selectCategory(c)
+            for _, o in ipairs(categories) do
+                local on = (o == c)
+                o.Pane.frame.Visible = on
+                o.Underline.Visible = on
+                o.Text.TextColor3 = on and Theme.TabIconSelected or Theme.TextDim
+                o.Text.Font = on and Theme.FontBold or Theme.Font
+                if o.Icon then o.Icon.ImageColor3 = on and Theme.Accent or Theme.TextDim end
+            end
+            Tab.ActiveCategory = c
+            closePopup()
+        end
+
+        function Tab:AddCategory(catName, catIcon)
+            if #categories == 0 then
+                defaultPane.frame.Visible = false
+                catBar.Visible = true
+            end
+
+            local pane = makePane(CAT_H)
+            pane.frame.Visible = false
+
+            local cbtn = new("TextButton", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.new(0, 0, 1, 0),
+                BackgroundTransparency = 1,
+                Text = "",
+                AutoButtonColor = false,
+                LayoutOrder = #categories + 1,
+                ZIndex = 7,
+                Parent = catList,
+            })
+            new("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 5),
+                Parent = cbtn,
+            })
+            new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = cbtn })
+
+            local cicon
+            local resolved = resolveIcon(catIcon)
+            if resolved then
+                cicon = new("ImageLabel", {
+                    Size = UDim2.fromOffset(14, 14),
+                    BackgroundTransparency = 1,
+                    Image = resolved,
+                    ImageColor3 = Theme.TextDim,
+                    LayoutOrder = 1,
+                    ZIndex = 8,
+                    Parent = cbtn,
+                })
+            end
+            local ctext = label(cbtn, catName, {
+                NoShadow = true,
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.new(0, 0, 1, 0),
+                TextColor3 = Theme.TextDim,
+                LayoutOrder = 2,
+                ZIndex = 8,
+            })
+            local underline = new("Frame", {
+                Position = UDim2.new(0, 0, 1, -1),
+                Size = UDim2.new(1, 0, 0, 1),
+                BackgroundColor3 = Theme.Accent,
+                BorderSizePixel = 0,
+                Visible = false,
+                ZIndex = 9,
+                Parent = cbtn,
+            })
+            onAccent(function()
+                underline.BackgroundColor3 = Theme.Accent
+                if cicon and Tab.ActiveCategory and Tab.ActiveCategory.Text == ctext then
+                    cicon.ImageColor3 = Theme.Accent
+                end
+            end)
+
+            local Category = { Name = catName, Pane = pane, Text = ctext, Icon = cicon, Underline = underline }
+            function Category:AddSection(secName, side, height)
+                return buildSection(pane, catName, secName, side, height)
+            end
+            function Category:Select() selectCategory(Category) end
+
+            cbtn.MouseEnter:Connect(function()
+                if Tab.ActiveCategory ~= Category then
+                    ctext.TextColor3 = Theme.TabIconHover
+                    if cicon then cicon.ImageColor3 = Theme.TabIconHover end
+                end
+            end)
+            cbtn.MouseLeave:Connect(function()
+                if Tab.ActiveCategory ~= Category then
+                    ctext.TextColor3 = Theme.TextDim
+                    if cicon then cicon.ImageColor3 = Theme.TextDim end
+                end
+            end)
+            cbtn.MouseButton1Click:Connect(function() selectCategory(Category) end)
+
+            table.insert(categories, Category)
+            if #categories == 1 then selectCategory(Category) end
+            return Category
+        end
+
+        function Tab:SelectCategory(which)
+            for i, c in ipairs(categories) do
+                if i == which or c.Name == which then
+                    selectCategory(c)
+                    return true
+                end
+            end
+            return false
+        end
+
+        -- Tab:AddSection: goes to the most recently created category,
+        -- or to the plain page when the tab has no categories
+        function Tab:AddSection(secName, side, height)
+            local target = categories[#categories]
+            if target then
+                return buildSection(target.Pane, target.Name, secName, side, height)
+            end
+            return buildSection(defaultPane, nil, secName, side, height)
         end
 
         return Tab
