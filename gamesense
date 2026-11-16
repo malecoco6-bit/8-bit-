@@ -1538,7 +1538,7 @@ function Library:CreateWindow(cfg)
             -- dark lines on the top and bottom edges of the selected tab
             new("Frame", {
                 Name = "TopLine",
-                Size = UDim2.new(1, 0, 0, 1),
+                Size = UDim2.new(1, -1, 0, 1),
                 BackgroundColor3 = Theme.Frame,
                 BorderSizePixel = 0,
                 ZIndex = 6,
@@ -1547,7 +1547,7 @@ function Library:CreateWindow(cfg)
             new("Frame", {
                 Name = "BottomLine",
                 Position = UDim2.new(0, 0, 1, -1),
-                Size = UDim2.new(1, 0, 0, 1),
+                Size = UDim2.new(1, -1, 0, 1),
                 BackgroundColor3 = Theme.Frame,
                 BorderSizePixel = 0,
                 ZIndex = 6,
