@@ -1539,7 +1539,7 @@ function Library:CreateWindow(cfg)
             new("Frame", {
                 Name = "TopLine",
                 Size = UDim2.new(1, 0, 0, 1),
-                BackgroundColor3 = Theme.Outline,
+                BackgroundColor3 = Theme.Frame,
                 BorderSizePixel = 0,
                 ZIndex = 6,
                 Parent = selBox,
@@ -1548,7 +1548,7 @@ function Library:CreateWindow(cfg)
                 Name = "BottomLine",
                 Position = UDim2.new(0, 0, 1, -1),
                 Size = UDim2.new(1, 0, 0, 1),
-                BackgroundColor3 = Theme.Outline,
+                BackgroundColor3 = Theme.Frame,
                 BorderSizePixel = 0,
                 ZIndex = 6,
                 Parent = selBox,
