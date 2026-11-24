@@ -201,25 +201,6 @@ local function stroke(parent, color, thickness, transparency)
     })
 end
 
--- a small flat triangle (no image needed): a 45°-rotated square clipped to its bottom half.
--- rotate the returned frame 180 to flip it from pointing down to pointing up.
-local function triangleArrow(parent, w, h, color)
-    local clip = new("Frame", {
-        Size = UDim2.fromOffset(w, h),
-        BackgroundTransparency = 1,
-        ClipsDescendants = true,
-        Parent = parent,
-    })
-    local sq = new("Frame", {
-        Size = UDim2.fromOffset(w, w),
-        Position = UDim2.fromOffset(0, -(w / 2)),
-        BackgroundColor3 = color,
-        BorderSizePixel = 0,
-        Rotation = 45,
-        Parent = clip,
-    })
-    return clip, sq
-end
 
 local function shade(c, m)
     return Color3.new(c.R * m, c.G * m, c.B * m)
@@ -2022,11 +2003,11 @@ function Library:CreateWindow(cfg)
                     return tostring(x) .. (fmt or "")
                 end
                 local obj = {}
+                valueLabel.AnchorPoint = Vector2.new(0.5, 0)
+                valueLabel.Position = UDim2.new(0.5, 0, 1, 4)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
-                    valueLabel.AnchorPoint = Vector2.new(0.5, 0)
-                    valueLabel.Position = UDim2.new(a, 0, 1, 2)
                     valueLabel.Text = format(value)
                 end
                 function obj:Set(x)
@@ -2101,21 +2082,21 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                local arrowHolder = new("Frame", {
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    Position = UDim2.new(1, -7, 0.5, 0),
-                    Size = UDim2.fromOffset(8, 4),
-                    BackgroundTransparency = 1,
+                local arrow = label(head, "▾", {
+                    NoShadow = true,
+                    Size = UDim2.fromOffset(14, 16),
+                    Position = UDim2.new(1, -16, 0, 0),
+                    TextXAlignment = Enum.TextXAlignment.Center,
+                    TextColor3 = Theme.Accent,
+                    TextSize = 11,
                     ZIndex = 9,
-                    Parent = head,
                 })
-                local arrow, arrowSq = triangleArrow(arrowHolder, 8, 4, Theme.Accent)
-                onAccent(function() arrowSq.BackgroundColor3 = Theme.Accent end)
+                onAccent(function() arrow.TextColor3 = Theme.Accent end)
 
                 local list = makePanel(ctx, 100, 0)
-                -- arrow flips: pointing down when closed, up when open
+                -- arrow flips: ▾ closed, ▴ open
                 list:GetPropertyChangedSignal("Visible"):Connect(function()
-                    arrow.Rotation = list.Visible and 180 or 0
+                    arrow.Text = list.Visible and "▴" or "▾"
                 end)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
