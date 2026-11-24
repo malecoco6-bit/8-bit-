@@ -158,7 +158,7 @@ local Theme = {
     -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
     Font     = Enum.Font.Arial,
     FontBold = Enum.Font.ArialBold,
-    TextSize = 12,
+    TextSize = 10,
 
     -- page background texture (the selected tab uses the same one)
     Texture = "rbxassetid://8547666218",
@@ -424,12 +424,12 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
 
     local btn = new("TextButton", {
         AutomaticSize = Enum.AutomaticSize.X,
-        Size = UDim2.fromOffset(0, 12),
+        Size = UDim2.fromOffset(0, 10),
         BackgroundTransparency = 1,
         Text = keyText(key),
         TextColor3 = Theme.TextDim,
         Font = Theme.Font,
-        TextSize = 11,
+        TextSize = 9,
         AutoButtonColor = false,
         LayoutOrder = #container:GetChildren(),
         Parent = container,
@@ -466,7 +466,7 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
             TextXAlignment = Enum.TextXAlignment.Left,
             TextColor3 = Theme.TextDim,
             Font = Theme.Font,
-            TextSize = 11,
+            TextSize = 10,
             Parent = pop,
         })
         modeButtons[m[2]] = b
@@ -1790,12 +1790,12 @@ function Library:CreateWindow(cfg)
             end
             new("UIPadding", {
                 PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 8),
-                PaddingLeft = UDim.new(0, 22), PaddingRight = UDim.new(0, fixed and 18 or 22),
+                PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, fixed and 14 or 16),
                 Parent = items,
             })
             local layout = new("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 2),
+                Padding = UDim.new(0, 1),
                 Parent = items,
             })
             local function resize()
@@ -1825,8 +1825,8 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
             end
-            local INDENT = 19
-            local RESERVE = 46
+            local INDENT = 15
+            local RESERVE = 40
 
             local function reg(kind, text, obj)
                 if name == "Config" and secName ~= "Menu" then return end
@@ -1864,7 +1864,7 @@ function Library:CreateWindow(cfg)
                 local state = default and true or false
                 local onChanged, fire = emitter()
                 local r = new("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 16),
+                    Size = UDim2.new(1, 0, 0, 14),
                     BackgroundTransparency = 1,
                     Text = "",
                     AutoButtonColor = false,
@@ -1873,8 +1873,8 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
                 local check = new("Frame", {
-                    Size = UDim2.fromOffset(8, 8),
-                    Position = UDim2.fromOffset(0, 4),
+                    Size = UDim2.fromOffset(7, 7),
+                    Position = UDim2.fromOffset(0, 3),
                     BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 8,
@@ -1941,15 +1941,15 @@ function Library:CreateWindow(cfg)
                 end
                 local value = snap(default or min)
 
-                local holder2 = row(30)
+                local holder2 = row(26)
                 local lbl = label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
                     ZIndex = 8,
                 })
                 local bar = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT, 17),
-                    Size = UDim2.new(1, -RESERVE, 0, 6),
+                    Position = UDim2.fromOffset(INDENT, 14),
+                    Size = UDim2.new(1, -RESERVE, 0, 4),
                     BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     Text = "",
@@ -1980,33 +1980,33 @@ function Library:CreateWindow(cfg)
                 local valueLabel = label(bar, "", {
                     NoShadow = true,
                     AutomaticSize = Enum.AutomaticSize.X,
-                    Size = UDim2.fromOffset(0, 12),
+                    Size = UDim2.fromOffset(0, 10),
                     Font = Theme.FontBold,
-                    TextSize = 11,
+                    TextSize = 9,
                     TextColor3 = Color3.new(1, 1, 1),
                     TextStrokeTransparency = 0,
                     TextStrokeColor3 = Color3.new(0, 0, 0),
                     ZIndex = 10,
                 })
                 local minus = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT - 8, 12),
+                    Position = UDim2.fromOffset(INDENT - 8, 10),
                     Size = UDim2.fromOffset(8, 12),
                     BackgroundTransparency = 1,
                     Text = "-",
                     TextColor3 = Theme.TextDim,
                     Font = Theme.Font,
-                    TextSize = 11,
+                    TextSize = 10,
                     ZIndex = 8,
                     Parent = holder2,
                 })
                 local plus = new("TextButton", {
-                    Position = UDim2.new(1, -(RESERVE - INDENT) + 3, 0, 12),
+                    Position = UDim2.new(1, -(RESERVE - INDENT) + 3, 0, 10),
                     Size = UDim2.fromOffset(8, 12),
                     BackgroundTransparency = 1,
                     Text = "+",
                     TextColor3 = Theme.TextDim,
                     Font = Theme.Font,
-                    TextSize = 11,
+                    TextSize = 10,
                     ZIndex = 8,
                     Parent = holder2,
                 })
@@ -2019,8 +2019,8 @@ function Library:CreateWindow(cfg)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
-                    valueLabel.AnchorPoint = Vector2.new(a, 0)
-                    valueLabel.Position = UDim2.new(a, 0, 0, 0)
+                    valueLabel.AnchorPoint = Vector2.new(a, 0.5)
+                    valueLabel.Position = UDim2.new(a, 0, 0.5, 0)
                     valueLabel.Text = format(value)
                 end
                 function obj:Set(x)
@@ -2073,15 +2073,15 @@ function Library:CreateWindow(cfg)
                 end
 
                 local ROW, MAXROWS = 16, 10
-                local holder2 = row(34)
+                local holder2 = row(31)
                 label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
                     ZIndex = 8,
                 })
                 local head = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT, 15),
-                    Size = UDim2.new(1, -RESERVE, 0, 18),
+                    Position = UDim2.fromOffset(INDENT, 14),
+                    Size = UDim2.new(1, -RESERVE, 0, 16),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2099,11 +2099,11 @@ function Library:CreateWindow(cfg)
                     ZIndex = 9,
                 })
                 label(head, "▼", {
-                    Size = UDim2.fromOffset(14, 18),
+                    Size = UDim2.fromOffset(14, 16),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     TextColor3 = Theme.TextDim,
-                    TextSize = 10,
+                    TextSize = 9,
                     ZIndex = 9,
                 })
 
@@ -2369,7 +2369,7 @@ function Library:CreateWindow(cfg)
 
             function Section:AddButton(text, callback)
                 callback = callback or function() end
-                local r = row(20)
+                local r = row(18)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 1, 0),
@@ -2450,15 +2450,15 @@ function Library:CreateWindow(cfg)
 
             function Section:AddTextbox(text, default, callback)
                 callback = callback or function() end
-                local r = row(36)
+                local r = row(33)
                 label(r, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
                     ZIndex = 8,
                 })
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT, 15),
-                    Size = UDim2.new(1, -RESERVE, 0, 18),
+                    Position = UDim2.fromOffset(INDENT, 14),
+                    Size = UDim2.new(1, -RESERVE, 0, 16),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
