@@ -137,15 +137,20 @@ local Theme = {
     Panel      = Color3.fromRGB(23, 23, 23),
     Section    = Color3.fromRGB(23, 23, 23),
     Element    = Color3.fromRGB(36, 36, 36),
-    CheckOff   = Color3.fromRGB(64, 64, 64),
+    CheckOff   = Color3.fromRGB(52, 52, 52),
     Border     = Color3.fromRGB(45, 45, 45),
     Frame      = Color3.fromRGB(58, 58, 58),
     Outline    = Color3.fromRGB(0, 0, 0),
-    Text       = Color3.fromRGB(205, 205, 205),
+    Text       = Color3.fromRGB(200, 200, 200),
     Title      = Color3.fromRGB(225, 225, 225),
     TextDim    = Color3.fromRGB(140, 140, 140),
     Accent     = Color3.fromRGB(149, 184, 6),
     ScrollBar  = Color3.fromRGB(72, 72, 72),
+
+    -- flat controls (buttons, textboxes, lists, checkboxes, sliders, colour boxes)
+    Control        = Color3.fromRGB(28, 28, 28),
+    ControlOutline = Color3.fromRGB(10, 10, 10),   -- ONE value for every control outline
+    SliderBack     = Color3.fromRGB(30, 30, 30),
 
     TabIcon         = Color3.fromRGB(110, 110, 110),
     TabIconHover    = Color3.fromRGB(185, 185, 185),
@@ -547,8 +552,9 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     local h, s, v = color:ToHSV()
     local alpha = 1
 
+    -- small flat colour box (15x7) with the shared control outline
     local box = new("TextButton", {
-        Size = UDim2.fromOffset(17, 9),
+        Size = UDim2.fromOffset(15, 7),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
         Text = "",
@@ -556,8 +562,8 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         LayoutOrder = #container:GetChildren(),
         Parent = container,
     })
-    stroke(box, Theme.Outline, 1)
-    shine(box, 190)
+    stroke(box, Theme.ControlOutline, 1)
+    shine(box, 215)
 
     local PAD, SVS, HUEW = 4, 150, 12
     local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
@@ -852,6 +858,7 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     stroke(outer, Theme.Outline, 1)
+    local uiScale = new("UIScale", { Parent = outer })
 
     -- thicker (2px) grey frame
     local mid = new("Frame", {
@@ -1288,6 +1295,7 @@ function Library:CreateWindow(cfg)
     function Window:Toggle() Window:SetVisible(not outer.Visible) end
     function Window:SetBind(key) bind = key end
     function Window:SetTitle(t) titleLabel.Text = tostring(t or "") end
+    function Window:SetScale(s) uiScale.Scale = s end
     function Window:Destroy()
         for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
         gui:Destroy()
@@ -1874,13 +1882,13 @@ function Library:CreateWindow(cfg)
                 })
                 local check = new("Frame", {
                     Size = UDim2.fromOffset(7, 7),
-                    Position = UDim2.fromOffset(0, 3),
+                    Position = UDim2.fromOffset(1, 3),
                     BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(check, Theme.Outline, 1)
+                stroke(check, Theme.ControlOutline, 1)
                 local cg = new("UIGradient", { Rotation = 90, Parent = check })
 
                 local lblColor = Theme.Text
@@ -1894,7 +1902,7 @@ function Library:CreateWindow(cfg)
 
                 local function paint()
                     local c = state and Theme.Accent or Theme.CheckOff
-                    cg.Color = ColorSequence.new(c, shade(c, state and 0.55 or 0.6))
+                    cg.Color = ColorSequence.new(c, shade(c, state and 0.7 or 0.75))
                 end
                 paint()
                 onAccent(paint)
@@ -1941,28 +1949,23 @@ function Library:CreateWindow(cfg)
                 end
                 local value = snap(default or min)
 
-                local holder2 = row(26)
+                local holder2 = row(32)
                 local lbl = label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
                     ZIndex = 8,
                 })
                 local bar = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT, 14),
-                    Size = UDim2.new(1, -RESERVE, 0, 4),
-                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    Position = UDim2.fromOffset(INDENT, 15),
+                    Size = UDim2.new(1, -RESERVE, 0, 5),
+                    BackgroundColor3 = Theme.SliderBack,
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(bar, Theme.Outline, 1)
-                new("UIGradient", {
-                    Color = ColorSequence.new(Color3.fromRGB(34, 34, 34), Color3.fromRGB(24, 24, 24)),
-                    Rotation = 90,
-                    Parent = bar,
-                })
+                stroke(bar, Theme.ControlOutline, 1)
                 local fill = new("Frame", {
                     Size = UDim2.new(0, 0, 1, 0),
                     BackgroundColor3 = Color3.new(1, 1, 1),
@@ -1972,43 +1975,23 @@ function Library:CreateWindow(cfg)
                 })
                 local fillGrad = new("UIGradient", { Rotation = 90, Parent = fill })
                 local function paintFill()
-                    fillGrad.Color = ColorSequence.new(Theme.Accent, shade(Theme.Accent, 0.55))
+                    fillGrad.Color = ColorSequence.new(Theme.Accent, shade(Theme.Accent, 0.6))
                 end
                 paintFill()
                 onAccent(paintFill)
 
+                -- value text sits under the end of the fill
                 local valueLabel = label(bar, "", {
                     NoShadow = true,
                     AutomaticSize = Enum.AutomaticSize.X,
                     Size = UDim2.fromOffset(0, 10),
                     Font = Theme.FontBold,
-                    TextSize = 9,
+                    TextSize = 10,
+                    TextXAlignment = Enum.TextXAlignment.Center,
                     TextColor3 = Color3.new(1, 1, 1),
                     TextStrokeTransparency = 0,
                     TextStrokeColor3 = Color3.new(0, 0, 0),
                     ZIndex = 10,
-                })
-                local minus = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT - 8, 10),
-                    Size = UDim2.fromOffset(8, 12),
-                    BackgroundTransparency = 1,
-                    Text = "-",
-                    TextColor3 = Theme.TextDim,
-                    Font = Theme.Font,
-                    TextSize = 10,
-                    ZIndex = 8,
-                    Parent = holder2,
-                })
-                local plus = new("TextButton", {
-                    Position = UDim2.new(1, -(RESERVE - INDENT) + 3, 0, 10),
-                    Size = UDim2.fromOffset(8, 12),
-                    BackgroundTransparency = 1,
-                    Text = "+",
-                    TextColor3 = Theme.TextDim,
-                    Font = Theme.Font,
-                    TextSize = 10,
-                    ZIndex = 8,
-                    Parent = holder2,
                 })
 
                 local function format(x)
@@ -2019,8 +2002,8 @@ function Library:CreateWindow(cfg)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
-                    valueLabel.AnchorPoint = Vector2.new(a, 0.5)
-                    valueLabel.Position = UDim2.new(a, 0, 0.5, 0)
+                    valueLabel.AnchorPoint = Vector2.new(0.5, 0)
+                    valueLabel.Position = UDim2.new(a, 0, 1, 2)
                     valueLabel.Text = format(value)
                 end
                 function obj:Set(x)
@@ -2033,9 +2016,6 @@ function Library:CreateWindow(cfg)
                 function obj:OnChanged(fn) onChanged(fn) return obj end
                 function obj:SetText(t) lbl.Text = t end
                 render()
-
-                minus.MouseButton1Click:Connect(function() obj:Set(value - step) end)
-                plus.MouseButton1Click:Connect(function() obj:Set(value + step) end)
 
                 local dragging = false
                 local function update(x)
@@ -2225,6 +2205,8 @@ function Library:CreateWindow(cfg)
                 options = options or {}
                 rows = rows or 6
                 local ROW = 16
+                local hasLabel = text ~= nil and text ~= ""
+                local top = hasLabel and 15 or 2
                 local onChanged, fire = emitter()
                 local selectedValue
                 if multi then
@@ -2236,22 +2218,23 @@ function Library:CreateWindow(cfg)
                     selectedValue = default
                 end
 
-                local holder2 = row(15 + rows * ROW + 2)
-                label(holder2, text, {
-                    Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -RESERVE, 0, 12),
-                    ZIndex = 8,
-                })
+                local holder2 = row(top + rows * ROW + 4)
+                if hasLabel then
+                    label(holder2, text, {
+                        Position = UDim2.fromOffset(INDENT, 0),
+                        Size = UDim2.new(1, -RESERVE, 0, 12),
+                        ZIndex = 8,
+                    })
+                end
                 local box = new("Frame", {
-                    Position = UDim2.fromOffset(INDENT, 15),
+                    Position = UDim2.fromOffset(INDENT, top),
                     Size = UDim2.new(1, -RESERVE, 0, rows * ROW + 2),
-                    BackgroundColor3 = Theme.Element,
+                    BackgroundColor3 = Theme.Control,
                     BorderSizePixel = 0,
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(box, Theme.Outline, 1)
-                shine(box, 200)
+                stroke(box, Theme.ControlOutline, 1)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
@@ -2274,8 +2257,15 @@ function Library:CreateWindow(cfg)
                 end
                 local function refresh()
                     for o, b in pairs(buttons) do
-                        b.TextColor3 = isOn(o) and Theme.Accent or Theme.TextDim
-                        b.Font = isOn(o) and Theme.FontBold or Theme.Font
+                        local on = isOn(o)
+                        b.TextColor3 = on and Theme.Accent or Theme.TextDim
+                        b.Font = on and Theme.FontBold or Theme.Font
+                        b.BackgroundTransparency = on and 0 or 1
+                        local bar = b:FindFirstChild("Bar")
+                        if bar then
+                            bar.Visible = on
+                            bar.BackgroundColor3 = Theme.Accent
+                        end
                     end
                 end
                 onAccent(refresh)
@@ -2286,14 +2276,26 @@ function Library:CreateWindow(cfg)
                         local b = new("TextButton", {
                             LayoutOrder = i,
                             Size = UDim2.new(1, -4, 0, ROW),
+                            BackgroundColor3 = Theme.Element,
                             BackgroundTransparency = 1,
+                            BorderSizePixel = 0,
                             Text = "  " .. tostring(opt),
                             TextXAlignment = Enum.TextXAlignment.Left,
                             TextColor3 = Theme.TextDim,
                             Font = Theme.Font,
                             TextSize = Theme.TextSize,
+                            AutoButtonColor = false,
                             ZIndex = 10,
                             Parent = scroll,
+                        })
+                        new("Frame", {
+                            Name = "Bar",
+                            Size = UDim2.new(0, 2, 1, 0),
+                            BackgroundColor3 = Theme.Accent,
+                            BorderSizePixel = 0,
+                            Visible = false,
+                            ZIndex = 11,
+                            Parent = b,
                         })
                         buttons[opt] = b
                         b.MouseEnter:Connect(function()
@@ -2334,6 +2336,12 @@ function Library:CreateWindow(cfg)
                     options = newOptions or {}
                     build()
                 end
+                function obj:Filter(q)
+                    q = tostring(q or ""):lower()
+                    for opt, b in pairs(buttons) do
+                        b.Visible = (q == "") or (tostring(opt):lower():find(q, 1, true) ~= nil)
+                    end
+                end
                 build()
                 reg(multi and "multilist" or "listbox", text, obj)
                 return vis(obj, holder2)
@@ -2373,22 +2381,21 @@ function Library:CreateWindow(cfg)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 1, 0),
-                    BackgroundColor3 = Theme.Element,
+                    BackgroundColor3 = Theme.Control,
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(b, Theme.Outline, 1)
-                shine(b, 200)
+                stroke(b, Theme.ControlOutline, 1)
                 local bl = label(b, text, {
                     Size = UDim2.fromScale(1, 1),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     ZIndex = 9,
                 })
-                b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(46, 46, 46) end)
-                b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
+                b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(38, 38, 38) end)
+                b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Control end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
                 local obj = { Instance = b }
                 function obj:SetText(t) bl.Text = t end
@@ -2448,18 +2455,23 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            function Section:AddTextbox(text, default, callback)
+            -- text = "" gives a label-less box (search style). live = true fires the callback on every keystroke
+            -- and adds a small "x" clear button.
+            function Section:AddTextbox(text, default, callback, live)
                 callback = callback or function() end
-                local r = row(33)
-                label(r, text, {
-                    Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -RESERVE, 0, 12),
-                    ZIndex = 8,
-                })
+                local hasLabel = text ~= nil and text ~= ""
+                local r = row(hasLabel and 33 or 20)
+                if hasLabel then
+                    label(r, text, {
+                        Position = UDim2.fromOffset(INDENT, 0),
+                        Size = UDim2.new(1, -RESERVE, 0, 12),
+                        ZIndex = 8,
+                    })
+                end
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT, 14),
+                    Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
                     Size = UDim2.new(1, -RESERVE, 0, 16),
-                    BackgroundColor3 = Theme.Element,
+                    BackgroundColor3 = Theme.Control,
                     BorderSizePixel = 0,
                     Text = default or "",
                     PlaceholderText = "...",
@@ -2472,14 +2484,34 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(tb, Theme.Outline, 1)
-                shine(tb, 200)
-                new("UIPadding", { PaddingLeft = UDim.new(0, 6), Parent = tb })
-                tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
+                stroke(tb, Theme.ControlOutline, 1)
+                new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 18), Parent = tb })
+
+                if live then
+                    tb:GetPropertyChangedSignal("Text"):Connect(function() task.spawn(callback, tb.Text) end)
+                    local x = new("TextButton", {
+                        Position = UDim2.new(1, -14, 0, 0),
+                        Size = UDim2.fromOffset(14, 16),
+                        BackgroundTransparency = 1,
+                        Text = "x",
+                        TextColor3 = Theme.TextDim,
+                        Font = Theme.Font,
+                        TextSize = 9,
+                        ZIndex = 9,
+                        Parent = tb,
+                    })
+                    x.MouseButton1Click:Connect(function() tb.Text = "" end)
+                else
+                    tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
+                end
+
                 local obj = { Instance = tb }
                 function obj:Get() return tb.Text end
-                function obj:Set(t) tb.Text = tostring(t or "") task.spawn(callback, tb.Text) end
-                reg("textbox", text, obj)
+                function obj:Set(t)
+                    tb.Text = tostring(t or "")
+                    if not live then task.spawn(callback, tb.Text) end
+                end
+                if hasLabel then reg("textbox", text, obj) end
                 return vis(obj, r)
             end
 
@@ -2609,26 +2641,33 @@ function Library:CreateWindow(cfg)
         opts = opts or {}
         local tab = Window:AddTab({ Name = "Config", Icon = opts.Icon or "config" })
 
+        -- ── left: Presets ──
         local presets = tab:AddSection("Presets", "Left")
-        local nameBox
-        local list = presets:AddDropdown("Config list", Window:ListConfigs(), nil, function(v)
-            if nameBox and v then nameBox:Set(v) end
-        end)
-        nameBox = presets:AddTextbox("Config name", "default")
+        local nameBox, list
         local function refreshList() list:SetOptions(Window:ListConfigs()) end
         local function result(ok, msg, good)
             Window:Notify(ok and good or ("Failed: " .. tostring(msg)))
         end
+
+        presets:AddTextbox("", "", function(q) if list then list:Filter(q) end end, true)
+            .Instance.PlaceholderText = "Search..."
+        list = presets:AddListbox("", Window:ListConfigs(), nil, function(v)
+            if nameBox and v then nameBox:Set(v) end
+        end, 10)
+
+        presets:AddSpacer(10)
+        nameBox = presets:AddTextbox("Config name", "default")
+
+        presets:AddButton("Load", function()
+            local n = nameBox:Get()
+            local ok, err = Window:LoadConfig(n)
+            result(ok, err, "Loaded config " .. n)
+        end)
         presets:AddButton("Save", function()
             local n = nameBox:Get()
             local ok, err = Window:SaveConfig(n)
             result(ok, err, "Saved config " .. n)
             refreshList()
-        end)
-        presets:AddButton("Load", function()
-            local n = nameBox:Get()
-            local ok, err = Window:LoadConfig(n)
-            result(ok, err, "Loaded config " .. n)
         end)
         presets:AddButton("Delete", function()
             local n = nameBox:Get()
@@ -2636,23 +2675,15 @@ function Library:CreateWindow(cfg)
             result(ok, err, "Deleted config " .. n)
             refreshList()
         end)
-        presets:AddButton("Refresh list", refreshList)
-
-        local menu = tab:AddSection("Menu", "Left")
-        menu:AddLabel("Menu accent"):AddColorPicker(Theme.Accent, false, function(c) Window:SetAccent(c) end)
-        menu:AddToggle("Keybind list", kbEnabled, function(v) Window:SetKeybindList(v) end)
-        menu:AddToggle("Watermark", wmTemplate ~= nil, function(v)
-            Window:SetWatermark(v and DEFAULT_WATERMARK or nil)
-        end)
-        local menuKey = menu:AddKeybind("Menu key", bind, "Always")
-        menuKey.KeyChanged = function(k)
-            if k and typeof(k) == "EnumItem" and k.EnumType == Enum.KeyCode then
-                Window:SetBind(k)
+        presets:AddButton("Import from clipboard", function()
+            if not getclipboard then
+                Window:Notify("Failed: your executor has no getclipboard")
+                return
             end
-        end
-
-        local share = tab:AddSection("Right", "Right")
-        share:AddButton("Export to clipboard", function()
+            local ok, err = Window:ImportConfig(getclipboard())
+            result(ok, err, "Imported config")
+        end)
+        presets:AddButton("Export to clipboard", function()
             if setclipboard then
                 setclipboard(Window:ExportConfig())
                 Window:Notify("Config copied to clipboard")
@@ -2660,13 +2691,23 @@ function Library:CreateWindow(cfg)
                 Window:Notify("Failed: your executor has no setclipboard")
             end
         end)
-        local importBox = share:AddTextbox("Import string", "")
-        share:AddButton("Import", function()
-            local ok, err = Window:ImportConfig(importBox:Get())
-            result(ok, err, "Imported config")
+
+        -- ── right: Settings ──
+        local settings = tab:AddSection("Settings", "Right")
+        settings:AddToggle("Watermark", wmTemplate ~= nil, function(v)
+            Window:SetWatermark(v and DEFAULT_WATERMARK or nil)
         end)
-        share:AddSeparator()
-        share:AddButton("Unload UI", function() Window:Destroy() end)
+        settings:AddToggle("Keybind list", kbEnabled, function(v) Window:SetKeybindList(v) end)
+        settings:AddSlider("Menu scale", 50, 150, 100, function(v)
+            Window:SetScale(v / 100)
+        end, "%", 5)
+        settings:AddButton("Clear all binds", function()
+            for _, f in pairs(Flags) do
+                if f.Kind == "keybind" then pcall(function() f.Obj:SetKey(nil) end) end
+            end
+            Window:Notify("Cleared all binds")
+        end)
+
         return tab
     end
 
