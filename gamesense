@@ -2567,7 +2567,7 @@ function Library:CreateWindow(cfg)
             end
 
             -- text = "" gives a label-less box (search style). live = true fires the callback on every keystroke
-            -- and adds a small "x" clear button.
+            -- and adds a small magnifying glass on the right side of the box.
             function Section:AddTextbox(text, default, callback, live)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
@@ -2600,39 +2600,48 @@ function Library:CreateWindow(cfg)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 18), Parent = tb })
 
                 if live then
-    tb:GetPropertyChangedSignal("Text"):Connect(function() task.spawn(callback, tb.Text) end)
+                    tb:GetPropertyChangedSignal("Text"):Connect(function() task.spawn(callback, tb.Text) end)
 
-    -- magnifying glass on the RIGHT side of the box, drawn from pixels (no font needed).
-    -- lens on the top-left, handle going to the bottom-right, so it "looks" left.
-
-local icoY = (hasLabel and 14 or 2) + 5
-local ico = new("Frame", {
-    Name = "SearchIcon",
-    Position = UDim2.new(1, -39, 0, icoY),
-    Size = UDim2.fromOffset(6, 6),
-    BackgroundTransparency = 1,
-    ZIndex = 9,
-    Parent = r,
-})
-local lens = new("Frame", {
-    Size = UDim2.fromOffset(4, 4),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ZIndex = 9,
-    Parent = ico,
-})
-new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = lens })
-local lensStroke = stroke(lens, Theme.TextDim, 1)
-local handle = new("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromOffset(5, 5),
-    Size = UDim2.fromOffset(1, 2),
-    Rotation = -45,
-    BackgroundColor3 = Theme.TextDim,
-    BorderSizePixel = 0,
-    ZIndex = 9,
-    Parent = ico,
-})
+                    -- magnifying glass on the RIGHT side of the box, drawn from pixels (no font needed).
+                    -- lens on the top-left, handle going to the bottom-right.
+                    -- to resize: change the numbers below. to move: change -39 (left/right) or + 5 (up/down).
+                    local icoY = (hasLabel and 14 or 2) + 5
+                    local ico = new("Frame", {
+                        Name = "SearchIcon",
+                        Position = UDim2.new(1, -39, 0, icoY),
+                        Size = UDim2.fromOffset(6, 6),
+                        BackgroundTransparency = 1,
+                        ZIndex = 9,
+                        Parent = r,
+                    })
+                    local lens = new("Frame", {
+                        Size = UDim2.fromOffset(4, 4),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                        ZIndex = 9,
+                        Parent = ico,
+                    })
+                    new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = lens })
+                    local lensStroke = stroke(lens, Theme.TextDim, 1)
+                    local handle = new("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Position = UDim2.fromOffset(5, 5),
+                        Size = UDim2.fromOffset(1, 2),
+                        Rotation = -45,
+                        BackgroundColor3 = Theme.TextDim,
+                        BorderSizePixel = 0,
+                        ZIndex = 9,
+                        Parent = ico,
+                    })
+                    -- brighten the icon while there is text in the box
+                    tb:GetPropertyChangedSignal("Text"):Connect(function()
+                        local c = (tb.Text ~= "") and Theme.Text or Theme.TextDim
+                        lensStroke.Color = c
+                        handle.BackgroundColor3 = c
+                    end)
+                else
+                    tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
+                end
 
                 local obj = { Instance = tb }
                 function obj:Get() return tb.Text end
