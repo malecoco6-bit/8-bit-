@@ -188,6 +188,32 @@ local Theme = {
 }
 Library.Theme = Theme
 
+-- sizes you can change from your own script (set them BEFORE Library:CreateWindow):
+--   Library.Layout.ButtonHeight = 14
+Library.Layout = {
+    -- window / tabs
+    TabWidth       = 74,    -- tab column width
+    TabHeight      = 64,    -- height of each tab
+    TabTop         = 9,     -- gap above the first tab
+    SectionGap     = 14,    -- space between sections in a column
+
+    -- inside sections
+    Indent         = 15,    -- left margin of every control
+    Reserve        = 40,    -- left + right margin used by sliders / dropdowns (bigger = shorter)
+
+    -- controls
+    ButtonHeight   = 16,    -- height of buttons
+    ButtonGap      = 11,    -- empty space under each button
+    TextboxHeight  = 16,    -- textboxes / search box
+    DropdownHeight = 16,    -- dropdown header box
+    ListRowHeight  = 16,    -- rows in dropdown menus and listboxes
+    SliderHeight   = 5,     -- slider bar thickness
+    CheckboxSize   = 7,     -- toggle square
+    ColorBoxWidth  = 15,    -- colour picker box
+    ColorBoxHeight = 7,
+    ColorBoxShade  = 175,   -- colour box shading: 255 = flat, lower = darker
+}
+
 -- special value: draws the gamesense style watermark
 -- (any other string passed to SetWatermark still works as a plain template with {name} {fps} {ping} {time} {config})
 local DEFAULT_WATERMARK = "{gamesense}"
@@ -608,7 +634,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
 
     -- small flat colour box (15x7) with the shared control outline
     local box = new("TextButton", {
-        Size = UDim2.fromOffset(15, 7),
+        Size = UDim2.fromOffset(Library.Layout.ColorBoxWidth, Library.Layout.ColorBoxHeight),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
         Text = "",
@@ -617,7 +643,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = container,
     })
     stroke(box, Theme.ControlOutline, 1, Theme.OutlineTransparency)
-    shine(box, 175)   -- bigger number = lighter shade (was 60)
+    shine(box, Library.Layout.ColorBoxShade)   -- bigger number = lighter shade
 
     local PAD, SVS, HUEW = 4, 150, 12
     local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
@@ -846,10 +872,10 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 74      -- tab column width (incl. the 2px divider)
-    local TAB_H = 64      -- height of each tab
+    local TAB_W = Library.Layout.TabWidth    -- tab column width (incl. the 2px divider)
+    local TAB_H = Library.Layout.TabHeight   -- height of each tab
     local TAB_ICON = 36   -- icon size inside each tab
-    local TAB_TOP = 9     -- gap between the gradient line and the first tab
+    local TAB_TOP = Library.Layout.TabTop    -- gap between the gradient line and the first tab
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
@@ -1698,7 +1724,7 @@ function Library:CreateWindow(cfg)
             })
             new("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 14),
+                Padding = UDim.new(0, Library.Layout.SectionGap),
                 Parent = col,
             })
             return col
@@ -1943,8 +1969,8 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
             end
-            local INDENT = 15
-            local RESERVE = 40
+            local INDENT = Library.Layout.Indent
+            local RESERVE = Library.Layout.Reserve
 
             local function reg(kind, text, obj)
                 if name == "Config" and secName ~= "Menu" then return end
@@ -1991,8 +2017,8 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
                 local check = new("Frame", {
-                    Size = UDim2.fromOffset(7, 7),
-                    Position = UDim2.fromOffset(1, 3),
+                    Size = UDim2.fromOffset(Library.Layout.CheckboxSize, Library.Layout.CheckboxSize),
+                    Position = UDim2.fromOffset(1, math.floor((14 - Library.Layout.CheckboxSize) / 2)),
                     BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 8,
@@ -2057,7 +2083,7 @@ function Library:CreateWindow(cfg)
                 end
                 local value = snap(default or min)
 
-                local holder2 = row(32)
+                local holder2 = row(27 + Library.Layout.SliderHeight)
                 local lbl = label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
@@ -2065,7 +2091,7 @@ function Library:CreateWindow(cfg)
                 })
                 local bar = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 15),
-                    Size = UDim2.new(1, -RESERVE, 0, 5),
+                    Size = UDim2.new(1, -RESERVE, 0, Library.Layout.SliderHeight),
                     BackgroundColor3 = Theme.SliderBack,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2163,8 +2189,8 @@ function Library:CreateWindow(cfg)
                     selectedValue = default or options[1]
                 end
 
-                local ROW, MAXROWS = 16, 10
-                local holder2 = row(31)
+                local ROW, MAXROWS = Library.Layout.ListRowHeight, 10
+                local holder2 = row(15 + Library.Layout.DropdownHeight)
                 label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
@@ -2172,7 +2198,7 @@ function Library:CreateWindow(cfg)
                 })
                 local head = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 14),
-                    Size = UDim2.new(1, -RESERVE, 0, 16),
+                    Size = UDim2.new(1, -RESERVE, 0, Library.Layout.DropdownHeight),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2313,7 +2339,7 @@ function Library:CreateWindow(cfg)
                 callback = callback or function() end
                 options = options or {}
                 rows = rows or 6
-                local ROW = 16
+                local ROW = Library.Layout.ListRowHeight
                 local hasLabel = text ~= nil and text ~= ""
                 local top = hasLabel and 15 or 2
                 local onChanged, fire = emitter()
@@ -2487,8 +2513,8 @@ function Library:CreateWindow(cfg)
 
             function Section:AddButton(text, callback)
                 callback = callback or function() end
-                local BTN_H   = 16   -- button height (skinny)
-                local BTN_GAP = 11   -- empty space under each button
+                local BTN_H   = Library.Layout.ButtonHeight
+                local BTN_GAP = Library.Layout.ButtonGap
                 local r = row(BTN_H + BTN_GAP)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
@@ -2573,7 +2599,8 @@ function Library:CreateWindow(cfg)
             function Section:AddTextbox(text, default, callback, live)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
-                local r = row(hasLabel and 33 or 20)
+                local TH = Library.Layout.TextboxHeight
+                local r = row(hasLabel and (14 + TH + 3) or (2 + TH + 2))
                 if hasLabel then
                     label(r, text, {
                         Position = UDim2.fromOffset(INDENT, 0),
@@ -2583,7 +2610,7 @@ function Library:CreateWindow(cfg)
                 end
                 local tb = new("TextBox", {
                     Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
-                    Size = UDim2.new(1, -INDENT, 0, 16),   -- same width as the buttons
+                    Size = UDim2.new(1, -INDENT, 0, TH),   -- same width as the buttons
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
@@ -2607,7 +2634,7 @@ function Library:CreateWindow(cfg)
                     -- magnifying glass on the RIGHT side of the box, drawn from pixels (no font needed).
                     -- lens on the top-left, handle going to the bottom-right.
                     -- to resize: change the numbers below. to move: change -39 (left/right) or + 5 (up/down).
-                    local icoY = (hasLabel and 14 or 2) + 5
+                    local icoY = (hasLabel and 14 or 2) + math.floor((TH - 6) / 2)
                     local ico = new("Frame", {
                         Name = "SearchIcon",
                         Position = UDim2.new(1, -14, 0, icoY),
