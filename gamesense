@@ -80,6 +80,11 @@ end
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
+-- on-screen size of each icon (px). gamesense uses native sized icons, so they are NOT all the same size.
+-- index = position in ICONS (1 headshot, 2 crosshair, 3 sun, 4 gear, 5 karambit, 6 save).
+-- these are estimates - if one looks too big / small just change its number.
+Library.IconSizes = { [1] = 38, [2] = 56, [3] = 60, [4] = 52, [5] = 52, [6] = 46 }
+
 local ICON_NAMES = {
     headshot = 1, rage = 1,
     crosshair = 2, legit = 2,
@@ -140,8 +145,13 @@ local Theme = {
     CheckOff   = Color3.fromRGB(52, 52, 52),
     Border     = Color3.fromRGB(45, 45, 45),
     Frame      = Color3.fromRGB(58, 58, 58),
-    FrameLight = Color3.fromRGB(60, 60, 60),   -- window frame: light grey rings
-    FrameDark  = Color3.fromRGB(40, 40, 40),   -- window frame: dark grey ring between them
+    -- window frame shading, outside -> inside (measured from gamesense): 12 | 25 40 40 60 | 12
+    FrameShades = {
+        Color3.fromRGB(25, 25, 25), Color3.fromRGB(40, 40, 40),
+        Color3.fromRGB(40, 40, 40), Color3.fromRGB(60, 60, 60),
+    },
+    TabLine    = Color3.fromRGB(40, 40, 40),   -- selected tab: inner top / bottom line
+    TabDivider = Color3.fromRGB(45, 45, 45),   -- grey line between the tab column and the page
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(200, 200, 200),
     Title      = Color3.fromRGB(225, 225, 225),
@@ -156,9 +166,9 @@ local Theme = {
     OutlineTransparency = 0.55,                    -- how faint every control's border is
     SliderBack     = Color3.fromRGB(30, 30, 30),
 
-    TabIcon         = Color3.fromRGB(95, 95, 95),
-    TabIconHover    = Color3.fromRGB(185, 185, 185),
-    TabIconSelected = Color3.fromRGB(255, 255, 255),
+    TabIcon         = Color3.fromRGB(87, 87, 87),     -- unselected icon
+    TabIconHover    = Color3.fromRGB(150, 150, 150),
+    TabIconSelected = Color3.fromRGB(210, 210, 210),  -- selected icon (gamesense is 210, not pure white)
 
     -- the tab column (darker than the page)
     TabIdle = Color3.fromRGB(12, 12, 12),
@@ -410,7 +420,7 @@ local function gradientLine(parent)
     new("Frame", {
         Position = UDim2.fromOffset(0, 2),
         Size = UDim2.new(1, 0, 0, 1),
-        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BackgroundColor3 = Theme.Background,
         BorderSizePixel = 0,
         ZIndex = 29,
         Parent = parent,
@@ -836,10 +846,10 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 70      -- tab column width
+    local TAB_W = 74      -- tab column width (incl. the 2px divider)
     local TAB_H = 64      -- height of each tab
     local TAB_ICON = 36   -- icon size inside each tab
-    local TAB_TOP = 26
+    local TAB_TOP = 9     -- gap between the gradient line and the first tab
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
@@ -898,15 +908,18 @@ function Library:CreateWindow(cfg)
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
         Position = UDim2.new(0.5, -size.X / 2, 0.5, -size.Y / 2),
-        BackgroundColor3 = Theme.Outline,           -- 1px black (outermost)
+        BackgroundColor3 = Theme.Background,        -- outermost pixel
         BorderSizePixel = 0,
         Parent = gui,
     })
     local uiScale = new("UIScale", { Parent = outer })
 
-    -- window frame, 5px total: black / light grey / dark grey / light grey / black
+    -- window frame (same shading as gamesense): 12 | 25 | 40 | 40 | 60 | 12
     local ring = outer
-    for _, c in ipairs({ Theme.FrameLight, Theme.FrameDark, Theme.FrameLight, Theme.Outline }) do
+    local shades = {}
+    for _, c in ipairs(Theme.FrameShades) do shades[#shades + 1] = c end
+    shades[#shades + 1] = Theme.Background
+    for _, c in ipairs(shades) do
         ring = new("Frame", {
             Size = UDim2.new(1, -2, 1, -2),
             Position = UDim2.fromOffset(1, 1),
@@ -1097,12 +1110,21 @@ function Library:CreateWindow(cfg)
         Parent = inner,
     })
 
-    -- thin divider on the right edge of the tab column (the selected tab covers it)
+    -- 2px divider on the right edge of the tab column: black, then grey (the selected tab covers it)
     new("Frame", {
-        Name = "TabDivider",
+        Name = "TabDividerDark",
+        Position = UDim2.new(1, -2, 0, 0),
+        Size = UDim2.new(0, 1, 1, 0),
+        BackgroundColor3 = Theme.Outline,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = tabBg,
+    })
+    new("Frame", {
+        Name = "TabDividerLight",
         Position = UDim2.new(1, -1, 0, 0),
         Size = UDim2.new(0, 1, 1, 0),
-        BackgroundColor3 = Theme.Border,
+        BackgroundColor3 = Theme.TabDivider,
         BorderSizePixel = 0,
         ZIndex = 3,
         Parent = tabBg,
@@ -1526,6 +1548,13 @@ function Library:CreateWindow(cfg)
         local name = opts.Name or "Tab"
         local icon = resolveIcon(opts.Icon ~= nil and opts.Icon or ICONS[#Window.Tabs + 1])
 
+        -- which built-in icon is this? (decides its size)
+        local iconIndex = opts.Icon
+        if type(iconIndex) == "string" then iconIndex = ICON_NAMES[iconIndex:lower()] end
+        if iconIndex == nil then iconIndex = #Window.Tabs + 1 end
+        if type(iconIndex) ~= "number" then iconIndex = nil end
+        local iconSize = opts.IconSize or (iconIndex and Library.IconSizes[iconIndex]) or TAB_ICON
+
         -- click area only
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
@@ -1555,7 +1584,7 @@ function Library:CreateWindow(cfg)
 
         local selBox = new("Frame", {
             Name = "Selected",
-            Size = UDim2.new(1, 1, 1, 0),
+            Size = UDim2.new(1, 0, 1, 0),
             Position = UDim2.fromOffset(0, 0),
             BackgroundColor3 = Theme.TextureBase,
             BackgroundTransparency = 0,
@@ -1588,31 +1617,31 @@ function Library:CreateWindow(cfg)
                 Parent = selBox,
             })
 
-            -- dark lines on the top and bottom edges of the selected tab
-            new("Frame", {
-                Name = "TopLine",
-                Size = UDim2.new(1, -1, 0, 1),
-                BackgroundColor3 = Theme.Border,
-                BorderSizePixel = 0,
-                ZIndex = 6,
-                Parent = selBox,
-            })
-            new("Frame", {
-                Name = "BottomLine",
-                Position = UDim2.new(0, 0, 1, -1),
-                Size = UDim2.new(1, -1, 0, 1),
-                BackgroundColor3 = Theme.Border,
-                BorderSizePixel = 0,
-                ZIndex = 6,
-                Parent = selBox,
-            })
+            -- 2px lines on the top and bottom edges of the selected tab:
+            -- top = black then grey, bottom = grey then black
+            local function tline(name, y, h, c)
+                new("Frame", {
+                    Name = name,
+                    Position = y,
+                    Size = UDim2.new(1, 0, 0, h),
+                    BackgroundColor3 = c,
+                    BorderSizePixel = 0,
+                    ZIndex = 6,
+                    Parent = selBox,
+                })
+            end
+            tline("TopDark",    UDim2.fromOffset(0, 0),      1, Theme.Outline)
+            tline("TopLight",   UDim2.fromOffset(0, 1),      1, Theme.TabLine)
+            tline("BottomLight", UDim2.new(0, 0, 1, -2),     1, Theme.TabLine)
+            tline("BottomDark",  UDim2.new(0, 0, 1, -1),     1, Theme.Outline)
         end
 
         local img
         if icon then
             img = new("ImageLabel", {
-                Size = UDim2.fromOffset(TAB_ICON, TAB_ICON),
-                Position = UDim2.new(0.5, -TAB_ICON / 2, 0.5, -TAB_ICON / 2),
+                Size = UDim2.fromOffset(iconSize, iconSize),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.fromScale(0.5, 0.5),
                 BackgroundTransparency = 1,
                 Image = icon,
                 ImageColor3 = Theme.TabIcon,
