@@ -831,6 +831,7 @@ function Library:CreateWindow(cfg)
             busy[d] = nil
         end
         local function hookText(d)
+            if d:GetAttribute("NoFontSkin") then return end
             if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
                 wantBold[d] = (d.Font == Enum.Font.ArialBold)
                 skin(d)
@@ -2082,21 +2083,23 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                local arrow = label(head, "▾", {
+                local arrow = label(head, "▼", {
                     NoShadow = true,
                     Size = UDim2.fromOffset(14, 16),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     TextColor3 = Theme.Accent,
+                    Font = Enum.Font.SourceSansBold,
                     TextSize = 11,
                     ZIndex = 9,
                 })
+                arrow:SetAttribute("NoFontSkin", true)
                 onAccent(function() arrow.TextColor3 = Theme.Accent end)
 
                 local list = makePanel(ctx, 100, 0)
-                -- arrow flips: ▾ closed, ▴ open
+                -- arrow flips: ▼ closed, ▲ open
                 list:GetPropertyChangedSignal("Visible"):Connect(function()
-                    arrow.Text = list.Visible and "▴" or "▾"
+                    arrow.Text = list.Visible and "▲" or "▼"
                 end)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
