@@ -1907,9 +1907,7 @@ function Library:CreateWindow(cfg)
                 paint()
                 onAccent(paint)
 
-                r.MouseEnter:Connect(function() lbl.TextColor3 = Color3.new(1, 1, 1) end)
-                r.MouseLeave:Connect(function() lbl.TextColor3 = lblColor end)
-
+                -- hovering the row no longer changes the label's own text colour
                 local obj = {}
                 function obj:Set(v)
                     state = v and true or false
@@ -1965,7 +1963,8 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(bar, Theme.ControlOutline, 1)
+                stroke(bar, Theme.Outline, 1)
+                shine(bar, 200)
                 local fill = new("Frame", {
                     Size = UDim2.new(0, 0, 1, 0),
                     BackgroundColor3 = Color3.new(1, 1, 1),
@@ -2078,7 +2077,8 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                label(head, "▼", {
+                local arrow = label(head, "▼", {
+                    NoShadow = true,
                     Size = UDim2.fromOffset(14, 16),
                     Position = UDim2.new(1, -16, 0, 0),
                     TextXAlignment = Enum.TextXAlignment.Center,
@@ -2088,6 +2088,10 @@ function Library:CreateWindow(cfg)
                 })
 
                 local list = makePanel(ctx, 100, 0)
+                -- arrow flips: ▼ closed, ▲ open
+                list:GetPropertyChangedSignal("Visible"):Connect(function()
+                    arrow.Text = list.Visible and "▲" or "▼"
+                end)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
@@ -2229,12 +2233,13 @@ function Library:CreateWindow(cfg)
                 local box = new("Frame", {
                     Position = UDim2.fromOffset(INDENT, top),
                     Size = UDim2.new(1, -RESERVE, 0, rows * ROW + 2),
-                    BackgroundColor3 = Theme.Control,
+                    BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(box, Theme.ControlOutline, 1)
+                stroke(box, Theme.Outline, 1)
+                shine(box, 200)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
@@ -2381,21 +2386,22 @@ function Library:CreateWindow(cfg)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 1, 0),
-                    BackgroundColor3 = Theme.Control,
+                    BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(b, Theme.ControlOutline, 1)
+                stroke(b, Theme.Outline, 1)
+                shine(b, 200)
                 local bl = label(b, text, {
                     Size = UDim2.fromScale(1, 1),
                     TextXAlignment = Enum.TextXAlignment.Center,
                     ZIndex = 9,
                 })
-                b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(38, 38, 38) end)
-                b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Control end)
+                b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(44, 44, 44) end)
+                b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
                 local obj = { Instance = b }
                 function obj:SetText(t) bl.Text = t end
@@ -2471,7 +2477,7 @@ function Library:CreateWindow(cfg)
                 local tb = new("TextBox", {
                     Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
                     Size = UDim2.new(1, -RESERVE, 0, 16),
-                    BackgroundColor3 = Theme.Control,
+                    BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
                     PlaceholderText = "...",
@@ -2484,7 +2490,8 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(tb, Theme.ControlOutline, 1)
+                stroke(tb, Theme.Outline, 1)
+                shine(tb, 200)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 18), Parent = tb })
 
                 if live then
@@ -2538,7 +2545,7 @@ function Library:CreateWindow(cfg)
         -- ───────── categories ─────────
         local categories = {}
 
-        local CAT_IDLE = Color3.fromRGB(120, 120, 120)
+        local CAT_IDLE = Theme.TabIcon
         local CAT_SIZE = 30
 
         local function selectCategory(c)
@@ -2575,14 +2582,14 @@ function Library:CreateWindow(cfg)
                 })
                 tint = function(c) cbtn.ImageColor3 = c end
             else
-                -- no icon given: fall back to a text button
+                -- no icon given: fall back to a bold title-coloured text button
                 cbtn = new("TextButton", {
                     AutomaticSize = Enum.AutomaticSize.X,
                     Size = UDim2.fromOffset(0, CAT_SIZE),
                     BackgroundTransparency = 1,
                     Text = catName,
                     TextColor3 = CAT_IDLE,
-                    Font = Theme.Font,
+                    Font = Theme.FontBold,
                     TextSize = Theme.TextSize,
                     AutoButtonColor = false,
                     LayoutOrder = #categories + 1,
