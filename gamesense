@@ -150,6 +150,7 @@ local Theme = {
     -- flat controls (buttons, textboxes, lists, checkboxes, sliders, colour boxes)
     Control        = Color3.fromRGB(28, 28, 28),
     ControlOutline = Color3.fromRGB(10, 10, 10),   -- ONE value for every control outline
+    OutlineTransparency = 0.55,                    -- how faint every control's border is
     SliderBack     = Color3.fromRGB(30, 30, 30),
 
     TabIcon         = Color3.fromRGB(110, 110, 110),
@@ -190,13 +191,34 @@ local function new(class, props, children)
     return inst
 end
 
-local function stroke(parent, color, thickness)
+local function stroke(parent, color, thickness, transparency)
     return new("UIStroke", {
         Color = color,
         Thickness = thickness or 1,
+        Transparency = transparency or 0,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Parent = parent,
     })
+end
+
+-- a small flat triangle (no image needed): a 45°-rotated square clipped to its bottom half.
+-- rotate the returned frame 180 to flip it from pointing down to pointing up.
+local function triangleArrow(parent, w, h, color)
+    local clip = new("Frame", {
+        Size = UDim2.fromOffset(w, h),
+        BackgroundTransparency = 1,
+        ClipsDescendants = true,
+        Parent = parent,
+    })
+    new("Frame", {
+        Size = UDim2.fromOffset(w, w),
+        Position = UDim2.fromOffset(0, h - w / 2),
+        BackgroundColor3 = color,
+        BorderSizePixel = 0,
+        Rotation = 45,
+        Parent = clip,
+    })
+    return clip
 end
 
 local function shade(c, m)
@@ -562,8 +584,8 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         LayoutOrder = #container:GetChildren(),
         Parent = container,
     })
-    stroke(box, Theme.ControlOutline, 1)
-    shine(box, 215)
+    stroke(box, Theme.ControlOutline, 1, Theme.OutlineTransparency)
+    shine(box, 60)
 
     local PAD, SVS, HUEW = 4, 150, 12
     local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
@@ -1888,7 +1910,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(check, Theme.ControlOutline, 1)
+                stroke(check, Theme.ControlOutline, 1, Theme.OutlineTransparency)
                 local cg = new("UIGradient", { Rotation = 90, Parent = check })
 
                 local lblColor = Theme.Text
@@ -1963,7 +1985,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(bar, Theme.Outline, 1)
+                stroke(bar, Theme.Outline, 1, Theme.OutlineTransparency)
                 shine(bar, 200)
                 local fill = new("Frame", {
                     Size = UDim2.new(0, 0, 1, 0),
@@ -2068,7 +2090,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(head, Theme.Outline, 1)
+                stroke(head, Theme.Outline, 1, Theme.OutlineTransparency)
                 shine(head, 200)
                 local cur = label(head, "", {
                     Size = UDim2.new(1, -20, 1, 0),
@@ -2077,20 +2099,20 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                local arrow = label(head, "▼", {
-                    NoShadow = true,
-                    Size = UDim2.fromOffset(14, 16),
-                    Position = UDim2.new(1, -16, 0, 0),
-                    TextXAlignment = Enum.TextXAlignment.Center,
-                    TextColor3 = Theme.TextDim,
-                    TextSize = 9,
+                local arrowHolder = new("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -7, 0.5, 0),
+                    Size = UDim2.fromOffset(8, 4),
+                    BackgroundTransparency = 1,
                     ZIndex = 9,
+                    Parent = head,
                 })
+                local arrow = triangleArrow(arrowHolder, 8, 4, Theme.TextDim)
 
                 local list = makePanel(ctx, 100, 0)
-                -- arrow flips: ▼ closed, ▲ open
+                -- arrow flips: pointing down when closed, up when open
                 list:GetPropertyChangedSignal("Visible"):Connect(function()
-                    arrow.Text = list.Visible and "▲" or "▼"
+                    arrow.Rotation = list.Visible and 180 or 0
                 end)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
@@ -2238,7 +2260,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = holder2,
                 })
-                stroke(box, Theme.Outline, 1)
+                stroke(box, Theme.Outline, 1, Theme.OutlineTransparency)
                 shine(box, 200)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
@@ -2393,7 +2415,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(b, Theme.Outline, 1)
+                stroke(b, Theme.Outline, 1, Theme.OutlineTransparency)
                 shine(b, 200)
                 local bl = label(b, text, {
                     Size = UDim2.fromScale(1, 1),
@@ -2490,7 +2512,7 @@ function Library:CreateWindow(cfg)
                     ZIndex = 8,
                     Parent = r,
                 })
-                stroke(tb, Theme.Outline, 1)
+                stroke(tb, Theme.Outline, 1, Theme.OutlineTransparency)
                 shine(tb, 200)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 18), Parent = tb })
 
