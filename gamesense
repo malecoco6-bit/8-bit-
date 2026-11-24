@@ -205,6 +205,7 @@ Library.Layout = {
     ButtonHeight   = 16,    -- height of buttons
     ButtonGap      = 11,    -- empty space under each button
     TextboxHeight  = 16,    -- textboxes / search box
+    TextboxInset   = 0,     -- extra margin on both sides of boxes that have a label (e.g. Config name)
     DropdownHeight = 16,    -- dropdown header box
     ListRowHeight  = 16,    -- rows in dropdown menus and listboxes
     SliderHeight   = 5,     -- slider bar thickness
@@ -2511,14 +2512,20 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            function Section:AddButton(text, callback)
+            -- opts (all optional):  Height, Width (pixels, default = full width), Inset (margin on both sides), Gap (space below)
+            --   section:AddButton("Load", cb, { Height = 22, Width = 100, Gap = 4 })
+            -- later:  btn:SetHeight(22)  btn:SetWidth(100)  btn:SetGap(4)  btn:SetInset(10)
+            function Section:AddButton(text, callback, opts)
                 callback = callback or function() end
-                local BTN_H   = Library.Layout.ButtonHeight
-                local BTN_GAP = Library.Layout.ButtonGap
+                opts = opts or {}
+                local BTN_H   = opts.Height or Library.Layout.ButtonHeight
+                local BTN_GAP = opts.Gap or Library.Layout.ButtonGap
+                local WIDTH   = opts.Width
+                local INSET   = opts.Inset or 0
                 local r = row(BTN_H + BTN_GAP)
                 local b = new("TextButton", {
-                    Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -INDENT, 0, BTN_H),   -- long: goes almost to the right edge
+                    Position = UDim2.fromOffset(INDENT + INSET, 0),
+                    Size = UDim2.new(1, -INDENT - INSET * 2, 0, BTN_H),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2536,8 +2543,24 @@ function Library:CreateWindow(cfg)
                 b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(44, 44, 44) end)
                 b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
+
+                local function apply()
+                    r.Size = UDim2.new(1, 0, 0, BTN_H + BTN_GAP)
+                    b.Position = UDim2.fromOffset(INDENT + INSET, 0)
+                    if WIDTH then
+                        b.Size = UDim2.fromOffset(WIDTH, BTN_H)
+                    else
+                        b.Size = UDim2.new(1, -INDENT - INSET * 2, 0, BTN_H)
+                    end
+                end
+                apply()
+
                 local obj = { Instance = b }
                 function obj:SetText(t) bl.Text = t end
+                function obj:SetHeight(h) BTN_H = h apply() return obj end
+                function obj:SetWidth(w) WIDTH = w apply() return obj end   -- nil = full width
+                function obj:SetGap(g) BTN_GAP = g apply() return obj end
+                function obj:SetInset(i) INSET = i apply() return obj end
                 return vis(obj, r)
             end
 
@@ -2596,21 +2619,31 @@ function Library:CreateWindow(cfg)
 
             -- text = "" gives a label-less box (search style). live = true fires the callback on every keystroke
             -- and adds a small magnifying glass on the right side of the box.
-            function Section:AddTextbox(text, default, callback, live)
+            -- opts (all optional):  Height, Width (pixels, default = full width), Inset (margin on both sides), Gap (space below)
+            --   section:AddTextbox("Name", "", cb, false, { Height = 20, Width = 120, Gap = 8 })
+            -- later:  box:SetHeight(20)  box:SetWidth(120)  box:SetGap(8)  box:SetInset(10)
+            function Section:AddTextbox(text, default, callback, live, opts)
                 callback = callback or function() end
+                opts = opts or {}
                 local hasLabel = text ~= nil and text ~= ""
-                local TH = Library.Layout.TextboxHeight
-                local r = row(hasLabel and (14 + TH + 3) or (2 + TH + 2))
+                local TH    = opts.Height or Library.Layout.TextboxHeight
+                local INSET = opts.Inset or (hasLabel and Library.Layout.TextboxInset or 0)
+                local GAP   = opts.Gap or (hasLabel and 3 or 2)
+                local WIDTH = opts.Width
+                local TOP   = hasLabel and 14 or 2
+
+                local r = row(TOP + TH + GAP)
+                local lbl
                 if hasLabel then
-                    label(r, text, {
-                        Position = UDim2.fromOffset(INDENT, 0),
-                        Size = UDim2.new(1, -INDENT, 0, 12),
+                    lbl = label(r, text, {
+                        Position = UDim2.fromOffset(INDENT + INSET, 0),
+                        Size = UDim2.new(1, -INDENT - INSET * 2, 0, 12),
                         ZIndex = 8,
                     })
                 end
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
-                    Size = UDim2.new(1, -INDENT, 0, TH),   -- same width as the buttons
+                    Position = UDim2.fromOffset(INDENT + INSET, TOP),
+                    Size = UDim2.new(1, -INDENT - INSET * 2, 0, TH),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
@@ -2628,16 +2661,35 @@ function Library:CreateWindow(cfg)
                 shine(tb, 200)
                 new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 18), Parent = tb })
 
+                local ico   -- search magnifying glass (only for live boxes)
+                local function apply()
+                    r.Size = UDim2.new(1, 0, 0, TOP + TH + GAP)
+                    tb.Position = UDim2.fromOffset(INDENT + INSET, TOP)
+                    if WIDTH then
+                        tb.Size = UDim2.fromOffset(WIDTH, TH)
+                    else
+                        tb.Size = UDim2.new(1, -INDENT - INSET * 2, 0, TH)
+                    end
+                    if lbl then
+                        lbl.Position = UDim2.fromOffset(INDENT + INSET, 0)
+                        lbl.Size = UDim2.new(1, -INDENT - INSET * 2, 0, 12)
+                    end
+                    if ico then
+                        local y = TOP + math.floor((TH - 6) / 2)
+                        if WIDTH then
+                            ico.Position = UDim2.fromOffset(INDENT + INSET + WIDTH - 14, y)
+                        else
+                            ico.Position = UDim2.new(1, -INSET - 14, 0, y)
+                        end
+                    end
+                end
+
                 if live then
                     tb:GetPropertyChangedSignal("Text"):Connect(function() task.spawn(callback, tb.Text) end)
 
                     -- magnifying glass on the RIGHT side of the box, drawn from pixels (no font needed).
-                    -- lens on the top-left, handle going to the bottom-right.
-                    -- to resize: change the numbers below. to move: change -39 (left/right) or + 5 (up/down).
-                    local icoY = (hasLabel and 14 or 2) + math.floor((TH - 6) / 2)
-                    local ico = new("Frame", {
+                    ico = new("Frame", {
                         Name = "SearchIcon",
-                        Position = UDim2.new(1, -14, 0, icoY),
                         Size = UDim2.fromOffset(6, 6),
                         BackgroundTransparency = 1,
                         ZIndex = 9,
@@ -2671,6 +2723,7 @@ function Library:CreateWindow(cfg)
                 else
                     tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
                 end
+                apply()
 
                 local obj = { Instance = tb }
                 function obj:Get() return tb.Text end
@@ -2678,6 +2731,10 @@ function Library:CreateWindow(cfg)
                     tb.Text = tostring(t or "")
                     if not live then task.spawn(callback, tb.Text) end
                 end
+                function obj:SetHeight(h) TH = h apply() return obj end
+                function obj:SetWidth(w) WIDTH = w apply() return obj end   -- nil = full width
+                function obj:SetGap(g) GAP = g apply() return obj end
+                function obj:SetInset(i) INSET = i apply() return obj end
                 if hasLabel then reg("textbox", text, obj) end
                 return vis(obj, r)
             end
