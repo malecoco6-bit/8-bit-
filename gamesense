@@ -2487,10 +2487,12 @@ function Library:CreateWindow(cfg)
 
             function Section:AddButton(text, callback)
                 callback = callback or function() end
-                local r = row(18)
+                local BTN_H   = 20   -- button height
+                local BTN_GAP = 7    -- empty space under each button
+                local r = row(BTN_H + BTN_GAP)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -RESERVE, 1, 0),
+                    Size = UDim2.new(1, -RESERVE, 0, BTN_H),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2572,16 +2574,17 @@ function Library:CreateWindow(cfg)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
                 local r = row(hasLabel and 33 or 20)
+                local INSET = hasLabel and 21 or 0   -- labelled boxes sit inside the buttons' width
                 if hasLabel then
                     label(r, text, {
-                        Position = UDim2.fromOffset(INDENT, 0),
-                        Size = UDim2.new(1, -RESERVE, 0, 12),
+                        Position = UDim2.fromOffset(INDENT + INSET, 0),
+                        Size = UDim2.new(1, -RESERVE - INSET * 2, 0, 12),
                         ZIndex = 8,
                     })
                 end
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
-                    Size = UDim2.new(1, -RESERVE, 0, 16),
+                    Position = UDim2.fromOffset(INDENT + INSET, hasLabel and 14 or 2),
+                    Size = UDim2.new(1, -RESERVE - INSET * 2, 0, 16),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
