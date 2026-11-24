@@ -140,6 +140,8 @@ local Theme = {
     CheckOff   = Color3.fromRGB(52, 52, 52),
     Border     = Color3.fromRGB(45, 45, 45),
     Frame      = Color3.fromRGB(58, 58, 58),
+    FrameLight = Color3.fromRGB(60, 60, 60),   -- window frame: light grey rings
+    FrameDark  = Color3.fromRGB(40, 40, 40),   -- window frame: dark grey ring between them
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(200, 200, 200),
     Title      = Color3.fromRGB(225, 225, 225),
@@ -154,7 +156,7 @@ local Theme = {
     OutlineTransparency = 0.55,                    -- how faint every control's border is
     SliderBack     = Color3.fromRGB(30, 30, 30),
 
-    TabIcon         = Color3.fromRGB(110, 110, 110),
+    TabIcon         = Color3.fromRGB(95, 95, 95),
     TabIconHover    = Color3.fromRGB(185, 185, 185),
     TabIconSelected = Color3.fromRGB(255, 255, 255),
 
@@ -209,7 +211,7 @@ end
 
 -- pixel drawn triangle arrow (no font or download needed)
 local function makeArrow(parent, props)
-    local W, H = 4, 2
+    local W, H = 3, 2   -- tiny arrow (try 5, 3 for a bit bigger)
     local z = props.ZIndex or 9
     local holder = new("Frame", {
         Size = UDim2.fromOffset(W, H),
@@ -896,22 +898,23 @@ function Library:CreateWindow(cfg)
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
         Position = UDim2.new(0.5, -size.X / 2, 0.5, -size.Y / 2),
-        BackgroundColor3 = Theme.Background,
+        BackgroundColor3 = Theme.Outline,           -- 1px black (outermost)
         BorderSizePixel = 0,
         Parent = gui,
     })
-    stroke(outer, Theme.Outline, 1)
     local uiScale = new("UIScale", { Parent = outer })
 
-    -- thicker (2px) grey frame
-    local mid = new("Frame", {
-        Size = UDim2.new(1, -4, 1, -4),
-        Position = UDim2.fromOffset(2, 2),
-        BackgroundColor3 = Theme.Background,
-        BorderSizePixel = 0,
-        Parent = outer,
-    })
-    stroke(mid, Theme.Frame, 2)
+    -- window frame, 5px total: black / light grey / dark grey / light grey / black
+    local ring = outer
+    for _, c in ipairs({ Theme.FrameLight, Theme.FrameDark, Theme.FrameLight, Theme.Outline }) do
+        ring = new("Frame", {
+            Size = UDim2.new(1, -2, 1, -2),
+            Position = UDim2.fromOffset(1, 1),
+            BackgroundColor3 = c,
+            BorderSizePixel = 0,
+            Parent = ring,
+        })
+    end
 
     local inner = new("Frame", {
         Size = UDim2.new(1, -2, 1, -2),
@@ -919,9 +922,8 @@ function Library:CreateWindow(cfg)
         BackgroundColor3 = Theme.Background,
         BorderSizePixel = 0,
         ClipsDescendants = true,
-        Parent = mid,
+        Parent = ring,
     })
-    stroke(inner, Theme.Outline, 1)
 
     gradientLine(inner)
     local TOP = 3
@@ -1590,7 +1592,7 @@ function Library:CreateWindow(cfg)
             new("Frame", {
                 Name = "TopLine",
                 Size = UDim2.new(1, -1, 0, 1),
-                BackgroundColor3 = Theme.Frame,
+                BackgroundColor3 = Theme.Border,
                 BorderSizePixel = 0,
                 ZIndex = 6,
                 Parent = selBox,
@@ -1599,7 +1601,7 @@ function Library:CreateWindow(cfg)
                 Name = "BottomLine",
                 Position = UDim2.new(0, 0, 1, -1),
                 Size = UDim2.new(1, -1, 0, 1),
-                BackgroundColor3 = Theme.Frame,
+                BackgroundColor3 = Theme.Border,
                 BorderSizePixel = 0,
                 ZIndex = 6,
                 Parent = selBox,
