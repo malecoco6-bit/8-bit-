@@ -617,7 +617,7 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = container,
     })
     stroke(box, Theme.ControlOutline, 1, Theme.OutlineTransparency)
-    shine(box, 60)
+    shine(box, 175)   -- bigger number = lighter shade (was 60)
 
     local PAD, SVS, HUEW = 4, 150, 12
     local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
@@ -2337,7 +2337,7 @@ function Library:CreateWindow(cfg)
                 end
                 local box = new("Frame", {
                     Position = UDim2.fromOffset(INDENT, top),
-                    Size = UDim2.new(1, -RESERVE, 0, rows * ROW + 2),
+                    Size = UDim2.new(1, -INDENT, 0, rows * ROW + 2),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     ZIndex = 8,
@@ -2487,12 +2487,12 @@ function Library:CreateWindow(cfg)
 
             function Section:AddButton(text, callback)
                 callback = callback or function() end
-                local BTN_H   = 20   -- button height
-                local BTN_GAP = 7    -- empty space under each button
+                local BTN_H   = 16   -- button height (skinny)
+                local BTN_GAP = 11   -- empty space under each button
                 local r = row(BTN_H + BTN_GAP)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -RESERVE, 0, BTN_H),
+                    Size = UDim2.new(1, -INDENT, 0, BTN_H),   -- long: goes almost to the right edge
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2574,17 +2574,16 @@ function Library:CreateWindow(cfg)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
                 local r = row(hasLabel and 33 or 20)
-                local INSET = hasLabel and 21 or 0   -- labelled boxes sit inside the buttons' width
                 if hasLabel then
                     label(r, text, {
-                        Position = UDim2.fromOffset(INDENT + INSET, 0),
-                        Size = UDim2.new(1, -RESERVE - INSET * 2, 0, 12),
+                        Position = UDim2.fromOffset(INDENT, 0),
+                        Size = UDim2.new(1, -INDENT, 0, 12),
                         ZIndex = 8,
                     })
                 end
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT + INSET, hasLabel and 14 or 2),
-                    Size = UDim2.new(1, -RESERVE - INSET * 2, 0, 16),
+                    Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
+                    Size = UDim2.new(1, -INDENT, 0, 16),   -- same width as the buttons
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
@@ -2611,7 +2610,7 @@ function Library:CreateWindow(cfg)
                     local icoY = (hasLabel and 14 or 2) + 5
                     local ico = new("Frame", {
                         Name = "SearchIcon",
-                        Position = UDim2.new(1, -39, 0, icoY),
+                        Position = UDim2.new(1, -14, 0, icoY),
                         Size = UDim2.fromOffset(6, 6),
                         BackgroundTransparency = 1,
                         ZIndex = 9,
