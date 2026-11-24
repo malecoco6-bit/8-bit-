@@ -376,7 +376,7 @@ local function emitter()
     return connect, fire
 end
 
-local function makeDraggable(handle, target, track)
+local function makeDraggable(handle, target, track, scaler)
     track = track or function(c) return c end
     local dragging, dragStart, startPos
     track(handle.InputBegan:Connect(function(input)
@@ -388,7 +388,7 @@ local function makeDraggable(handle, target, track)
     end))
     track(UserInputService.InputChanged:Connect(function(input)
         if dragging and isMove(input) then
-            local d = input.Position - dragStart
+            local d = (input.Position - dragStart) / ((scaler and scaler.Scale) or 1)
             target.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + d.X,
                 startPos.Y.Scale, startPos.Y.Offset + d.Y
@@ -902,6 +902,7 @@ function Library:CreateWindow(cfg)
     end
 
     local accentUpdaters = {}
+    local resizers = {}   -- every section height function (re-run when the menu scale changes)
     local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
 
     local outer = new("Frame", {
@@ -1180,8 +1181,8 @@ function Library:CreateWindow(cfg)
         ZIndex = 20,
         Parent = inner,
     })
-    makeDraggable(dragHandle, outer, track)
-    makeDraggable(tabBg, outer, track)
+    makeDraggable(dragHandle, outer, track, uiScale)
+    makeDraggable(tabBg, outer, track, uiScale)
     local titleLabel = label(dragHandle, hasTitle and cfg.Title or "", {
         Position = UDim2.fromOffset(8, 0),
         Size = UDim2.new(1, -16, 1, 0),
@@ -1362,7 +1363,19 @@ function Library:CreateWindow(cfg)
     function Window:Toggle() Window:SetVisible(not outer.Visible) end
     function Window:SetBind(key) bind = key end
     function Window:SetTitle(t) titleLabel.Text = tostring(t or "") end
-    function Window:SetScale(s) uiScale.Scale = s end
+    function Window:SetScale(s)
+        s = math.clamp(tonumber(s) or 1, 0.3, 3)
+        uiScale.Scale = s
+        closePopup()
+        -- AbsoluteContentSize updates a frame later, so re-measure after that
+        task.defer(function()
+            for _ = 1, 2 do
+                for _, fn in ipairs(resizers) do pcall(fn) end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end
+    function Window:GetScale() return uiScale.Scale end
     function Window:Destroy()
         for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
         gui:Destroy()
@@ -1888,12 +1901,13 @@ function Library:CreateWindow(cfg)
                     holder.Size = UDim2.new(1, 0, 0, height + 7)
                     return
                 end
-                local h = layout.AbsoluteContentSize.Y + 12 + 8
+                local h = layout.AbsoluteContentSize.Y / uiScale.Scale + 12 + 8
                 body.Size = UDim2.new(1, 0, 0, h)
                 holder.Size = UDim2.new(1, 0, 0, h + 7)
             end
             layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resize)
             resize()
+            resizers[#resizers + 1] = resize
 
             local Section = { Holder = holder }
             function Section:SetVisible(v) holder.Visible = v and true or false end
