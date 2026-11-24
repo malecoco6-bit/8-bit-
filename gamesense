@@ -2604,17 +2604,18 @@ function Library:CreateWindow(cfg)
 
     -- magnifying glass on the RIGHT side of the box, drawn from pixels (no font needed).
     -- lens on the top-left, handle going to the bottom-right, so it "looks" left.
-local icoY = (hasLabel and 14 or 2) + 4
+
+local icoY = (hasLabel and 14 or 2) + 5
 local ico = new("Frame", {
     Name = "SearchIcon",
-    Position = UDim2.new(1, -41, 0, icoY),
-    Size = UDim2.fromOffset(8, 8),
+    Position = UDim2.new(1, -39, 0, icoY),
+    Size = UDim2.fromOffset(6, 6),
     BackgroundTransparency = 1,
     ZIndex = 9,
     Parent = r,
 })
 local lens = new("Frame", {
-    Size = UDim2.fromOffset(5, 5),
+    Size = UDim2.fromOffset(4, 4),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 9,
@@ -2624,23 +2625,14 @@ new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = lens })
 local lensStroke = stroke(lens, Theme.TextDim, 1)
 local handle = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromOffset(6, 6),
-    Size = UDim2.fromOffset(1, 3),
+    Position = UDim2.fromOffset(5, 5),
+    Size = UDim2.fromOffset(1, 2),
     Rotation = -45,
     BackgroundColor3 = Theme.TextDim,
     BorderSizePixel = 0,
     ZIndex = 9,
     Parent = ico,
 })
-    -- optional: brighten the icon while you type
-    tb:GetPropertyChangedSignal("Text"):Connect(function()
-        local c = (tb.Text ~= "") and Theme.Text or Theme.TextDim
-        lensStroke.Color = c
-        handle.BackgroundColor3 = c
-    end)
-else
-    tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
-end
 
                 local obj = { Instance = tb }
                 function obj:Get() return tb.Text end
