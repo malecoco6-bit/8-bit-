@@ -209,7 +209,7 @@ end
 
 -- pixel drawn triangle arrow (no font or download needed)
 local function makeArrow(parent, props)
-    local W, H = 5, 3
+    local W, H = 4, 2
     local z = props.ZIndex or 9
     local holder = new("Frame", {
         Size = UDim2.fromOffset(W, H),
