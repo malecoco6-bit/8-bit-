@@ -1895,13 +1895,33 @@ function Library:CreateWindow(cfg)
                 Padding = UDim.new(0, 1),
                 Parent = items,
             })
+            -- height of the rows, measured from the rows themselves (their unscaled Size offsets), so it
+            -- is correct at ANY menu scale. (AbsoluteContentSize is in scaled screen pixels and was
+            -- making the boxes too short.)
+            local function contentHeight()
+                local total, n = 0, 0
+                for _, c in ipairs(items:GetChildren()) do
+                    if c:IsA("GuiObject") and c.Visible then
+                        local hgt
+                        if c.AutomaticSize == Enum.AutomaticSize.Y or c.AutomaticSize == Enum.AutomaticSize.XY then
+                            hgt = c.AbsoluteSize.Y / uiScale.Scale   -- wrapped text (AddInfo)
+                        else
+                            hgt = c.Size.Y.Offset
+                        end
+                        total += hgt
+                        n += 1
+                    end
+                end
+                return total + math.max(n - 1, 0) * 1   -- 1px padding between rows
+            end
+
             local function resize()
                 if fixed then
                     body.Size = UDim2.new(1, 0, 0, height)
                     holder.Size = UDim2.new(1, 0, 0, height + 7)
                     return
                 end
-                local h = layout.AbsoluteContentSize.Y / uiScale.Scale + 12 + 8
+                local h = contentHeight() + 12 + 8
                 body.Size = UDim2.new(1, 0, 0, h)
                 holder.Size = UDim2.new(1, 0, 0, h + 7)
             end
