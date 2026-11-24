@@ -144,6 +144,7 @@ local Theme = {
     Text       = Color3.fromRGB(200, 200, 200),
     Title      = Color3.fromRGB(225, 225, 225),
     TextDim    = Color3.fromRGB(140, 140, 140),
+    Arrow      = Color3.fromRGB(190, 190, 190),   -- dropdown arrow (white-grey)
     Accent     = Color3.fromRGB(149, 184, 6),
     ScrollBar  = Color3.fromRGB(72, 72, 72),
 
@@ -204,6 +205,44 @@ end
 
 local function shade(c, m)
     return Color3.new(c.R * m, c.G * m, c.B * m)
+end
+
+-- pixel drawn triangle arrow (no font or download needed)
+local function makeArrow(parent, props)
+    local W, H = 7, 4
+    local z = props.ZIndex or 9
+    local holder = new("Frame", {
+        Size = UDim2.fromOffset(W, H),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = props.Position,
+        BackgroundTransparency = 1,
+        ZIndex = z,
+        Parent = parent,
+    })
+    local rows = {}
+    for i = 1, H do
+        rows[i] = new("Frame", {
+            BackgroundColor3 = Theme.Arrow,
+            BorderSizePixel = 0,
+            ZIndex = z,
+            Parent = holder,
+        })
+    end
+    local obj = { Instance = holder }
+    function obj:SetDirection(up)
+        for i, f in ipairs(rows) do
+            local n = i - 1
+            local w = up and (1 + 2 * n) or (W - 2 * n)
+            local x = (W - w) / 2
+            f.Position = UDim2.fromOffset(x, n)
+            f.Size = UDim2.fromOffset(w, 1)
+        end
+    end
+    function obj:SetColor(c)
+        for _, f in ipairs(rows) do f.BackgroundColor3 = c end
+    end
+    obj:SetDirection(false)
+    return obj
 end
 
 -- watermark colours (gamesense style)
@@ -1985,7 +2024,7 @@ function Library:CreateWindow(cfg)
                 paintFill()
                 onAccent(paintFill)
 
-                -- value text sits under the end of the fill
+                -- value text rides the end of the fill (gamesense style)
                 local valueLabel = label(bar, "", {
                     NoShadow = true,
                     AutomaticSize = Enum.AutomaticSize.X,
@@ -2004,11 +2043,13 @@ function Library:CreateWindow(cfg)
                     return tostring(x) .. (fmt or "")
                 end
                 local obj = {}
-                valueLabel.AnchorPoint = Vector2.new(0.5, 0)
-                valueLabel.Position = UDim2.new(0.5, 0, 1, 4)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
+                    -- the value sits under the end of the fill, half over the bar,
+                    -- and stays inside the bar at both ends
+                    valueLabel.AnchorPoint = Vector2.new(a, 0.5)
+                    valueLabel.Position = UDim2.new(a, 0, 0.5, 4)
                     valueLabel.Text = format(value)
                 end
                 function obj:Set(x)
@@ -2083,23 +2124,13 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                local arrow = label(head, "▼", {
-                    NoShadow = true,
-                    Size = UDim2.fromOffset(14, 16),
-                    Position = UDim2.new(1, -16, 0, 0),
-                    TextXAlignment = Enum.TextXAlignment.Center,
-                    TextColor3 = Theme.Accent,
-                    Font = Enum.Font.SourceSansBold,
-                    TextSize = 11,
-                    ZIndex = 9,
-                })
-                arrow:SetAttribute("NoFontSkin", true)
-                onAccent(function() arrow.TextColor3 = Theme.Accent end)
+                -- white-grey arrow drawn from pixels (works with any font)
+                local arrow = makeArrow(head, { Position = UDim2.new(1, -10, 0.5, 0), ZIndex = 9 })
 
                 local list = makePanel(ctx, 100, 0)
-                -- arrow flips: ▼ closed, ▲ open
+                -- arrow flips: down when closed, up when open
                 list:GetPropertyChangedSignal("Visible"):Connect(function()
-                    arrow.Text = list.Visible and "▲" or "▼"
+                    arrow:SetDirection(list.Visible)
                 end)
                 local scroll = new("ScrollingFrame", {
                     Size = UDim2.fromScale(1, 1),
