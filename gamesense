@@ -7,6 +7,76 @@ local RunService       = game:GetService("RunService")
 local Library = {}
 Library.ConfigFolder = "gamesense_configs"
 
+Library.FontFile     = "verdana.ttf"
+Library.FontFileBold = "verdanab.ttf"
+Library.FontFace     = nil
+Library.FontFaceBold = nil
+
+Library.FontURLs = {
+    Regular = "https://raw.githubusercontent.com/adrienverge/copr-some-nice-fonts/master/Verdana.ttf",
+    Bold    = "https://raw.githubusercontent.com/malecoco6-bit/8-bit-/main/verdanab.ttf",
+}
+
+function Library:SetFontFile(regularFile, boldFile)
+    regularFile = regularFile or Library.FontFile
+    boldFile = boldFile or Library.FontFileBold
+    if not (isfile and writefile and getcustomasset and isfile(regularFile)) then
+        return false
+    end
+    local ok = pcall(function()
+        local faces = {
+            { name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(regularFile) },
+        }
+        if boldFile and isfile(boldFile) then
+            faces[#faces + 1] = { name = "Bold", weight = 700, style = "normal", assetId = getcustomasset(boldFile) }
+        end
+        local fam = "gamesense_verdana.json"
+        writefile(fam, HttpService:JSONEncode({ name = "Verdana", faces = faces }))
+        Library.FontFace = Font.new(getcustomasset(fam), Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        Library.FontFaceBold = Font.new(getcustomasset(fam), Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    end)
+    return ok and Library.FontFace ~= nil
+end
+
+local function getHttpFn()
+    return (syn and syn.request)
+        or http_request
+        or request
+        or (fluxus and fluxus.request)
+        or function(opts)
+            return { Body = game:HttpGet(opts.Url), StatusCode = 200 }
+        end
+end
+
+function Library:EnsureFont(urls)
+    urls = urls or Library.FontURLs
+    if not (writefile and isfile and getcustomasset) then
+        return false
+    end
+    if Library.FontFace then
+        return true
+    end
+
+    local function ensureFile(path, url)
+        if isfile(path) then return true end
+        local httpFn = getHttpFn()
+        local ok, res = pcall(httpFn, { Url = url, Method = "GET" })
+        if not ok or not res or not res.Body or #res.Body < 100 then
+            return false
+        end
+        local okWrite = pcall(writefile, path, res.Body)
+        return okWrite and isfile(path)
+    end
+
+    local regOk = ensureFile(Library.FontFile, urls.Regular)
+    if not regOk then
+        return false
+    end
+    local boldOk = urls.Bold and ensureFile(Library.FontFileBold, urls.Bold)
+
+    return Library:SetFontFile(Library.FontFile, boldOk and Library.FontFileBold or nil)
+end
+
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
@@ -717,11 +787,15 @@ function Library:CreateWindow(cfg)
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
     local TAB_W = 70      -- tab column width
-    local TAB_H = 56      -- height of each tab
-    local TAB_ICON = 26   -- icon size inside each tab
+    local TAB_H = 64      -- height of each tab
+    local TAB_ICON = 36   -- icon size inside each tab
     local TAB_TOP = 26
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
+
+    if not Library.FontFace then
+        pcall(function() Library:EnsureFont() end)
+    end
 
     local gui = new("ScreenGui", {
         Name = "GamesenseLib",
@@ -733,6 +807,38 @@ function Library:CreateWindow(cfg)
 
     local conns = {}
     local function track(c) conns[#conns + 1] = c return c end
+
+    -- ── apply the custom font to every text object (including ones created later) ──
+    -- Elements that asked for Enum.Font.ArialBold get the Verdana Bold face, everything else gets Regular.
+    if Library.FontFace then
+        local fontFace = Library.FontFace
+        local boldFace = Library.FontFaceBold or fontFace
+        local busy = {}
+        local wantBold = {}
+        local function skin(d)
+            if busy[d] then return end
+            busy[d] = true
+            pcall(function() d.FontFace = wantBold[d] and boldFace or fontFace end)
+            busy[d] = nil
+        end
+        local function hookText(d)
+            if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                wantBold[d] = (d.Font == Enum.Font.ArialBold)
+                skin(d)
+                d:GetPropertyChangedSignal("Font"):Connect(function()
+                    if busy[d] then return end
+                    if d.Font == Enum.Font.ArialBold then
+                        wantBold[d] = true
+                    elseif d.Font == Enum.Font.Arial or d.Font == Enum.Font.SourceSans then
+                        wantBold[d] = false
+                    end
+                    task.defer(skin, d)
+                end)
+            end
+        end
+        for _, d in ipairs(gui:GetDescendants()) do hookText(d) end
+        gui.DescendantAdded:Connect(function(d) task.defer(hookText, d) end)
+    end
 
     local accentUpdaters = {}
     local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
@@ -1449,19 +1555,6 @@ function Library:CreateWindow(cfg)
             })
         end
 
-            local selRing = new("Frame", {
-            Name = "SelRing",
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(0.5, 0, 0.5, 0),
-            Size = UDim2.fromOffset(TAB_ICON + 10, TAB_ICON + 10),
-            BackgroundTransparency = 1,
-            Visible = false,
-            ZIndex = 5,
-            Parent = btn,
-        })
-        new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = selRing })
-        stroke(selRing, Theme.TabIconSelected, 1)
-
         local img
         if icon then
             img = new("ImageLabel", {
@@ -1493,7 +1586,7 @@ function Library:CreateWindow(cfg)
             Parent = content,
         })
 
-        local CAT_H, PANE_TOP = 40, 54   -- category box height / where the columns start under it
+        local CAT_H, PANE_TOP = 52, 66   -- category box height / where the columns start under it
 
         local function makeColumn(parent, xScale, xOff)
             local col = new("ScrollingFrame", {
@@ -1584,10 +1677,10 @@ function Library:CreateWindow(cfg)
         new("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 24),
+            Padding = UDim.new(0, 36),
             Parent = catList,
         })
-        new("UIPadding", { PaddingLeft = UDim.new(0, 20), PaddingTop = UDim.new(0, 9), Parent = catList })
+        new("UIPadding", { PaddingLeft = UDim.new(0, 29), PaddingTop = UDim.new(0, 11), Parent = catList })
 
         local Tab = { Page = page, Name = name }
 
@@ -1595,9 +1688,9 @@ function Library:CreateWindow(cfg)
             page.Visible = on
             selBox.Visible = on
             idleBox.Visible = not on
-            selRing.Visible = on
             tint(on and Theme.TabIconSelected or Theme.TabIcon)
         end
+        Tab.SetSelected = setSelected
 
         function Tab.Select()
             if selected and selected ~= Tab then selected.SetSelected(false) end
@@ -2414,7 +2507,7 @@ function Library:CreateWindow(cfg)
         local categories = {}
 
         local CAT_IDLE = Color3.fromRGB(120, 120, 120)
-        local CAT_SIZE = 22
+        local CAT_SIZE = 30
 
         local function selectCategory(c)
             for _, o in ipairs(categories) do
