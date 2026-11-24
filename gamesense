@@ -210,7 +210,7 @@ local function triangleArrow(parent, w, h, color)
         ClipsDescendants = true,
         Parent = parent,
     })
-    new("Frame", {
+    local sq = new("Frame", {
         Size = UDim2.fromOffset(w, w),
         Position = UDim2.fromOffset(0, h - w / 2),
         BackgroundColor3 = color,
@@ -218,7 +218,7 @@ local function triangleArrow(parent, w, h, color)
         Rotation = 45,
         Parent = clip,
     })
-    return clip
+    return clip, sq
 end
 
 local function shade(c, m)
@@ -1671,6 +1671,7 @@ function Library:CreateWindow(cfg)
                     Position = UDim2.new(x, ox, y, oy),
                     Size = UDim2.new(w, ow, h, oh),
                     BackgroundColor3 = Theme.Border,
+                    BackgroundTransparency = Theme.OutlineTransparency,
                     BorderSizePixel = 0,
                     ZIndex = 6,
                     Parent = catBar,
@@ -1768,6 +1769,7 @@ function Library:CreateWindow(cfg)
                     Position = UDim2.new(x, ox, y, oy),
                     Size = UDim2.new(w, ow, h, oh),
                     BackgroundColor3 = Theme.Border,
+                    BackgroundTransparency = Theme.OutlineTransparency,
                     BorderSizePixel = 0,
                     ZIndex = 6,
                     Parent = body,
@@ -1794,6 +1796,22 @@ function Library:CreateWindow(cfg)
             end
             title:GetPropertyChangedSignal("TextBounds"):Connect(placeTitle)
             placeTitle()
+
+            local collapsed = false
+            local collapseBtn = new("TextButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -4, 0, -7),
+                Size = UDim2.fromOffset(14, 14),
+                BackgroundTransparency = 1,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 7,
+                Parent = body,
+            })
+            local collapseIcon = triangleArrow(collapseBtn, 8, 4, Theme.TextDim)
+            collapseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+            collapseIcon.Position = UDim2.fromScale(0.5, 0.5)
+            collapseIcon.Rotation = 180 -- expanded: points up
 
             local items
             if fixed then
@@ -1829,6 +1847,11 @@ function Library:CreateWindow(cfg)
                 Parent = items,
             })
             local function resize()
+                if collapsed then
+                    body.Size = UDim2.new(1, 0, 0, 14)
+                    holder.Size = UDim2.new(1, 0, 0, 14 + 7)
+                    return
+                end
                 if fixed then
                     body.Size = UDim2.new(1, 0, 0, height)
                     holder.Size = UDim2.new(1, 0, 0, height + 7)
@@ -1840,6 +1863,13 @@ function Library:CreateWindow(cfg)
             end
             layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resize)
             resize()
+
+            collapseBtn.MouseButton1Click:Connect(function()
+                collapsed = not collapsed
+                collapseIcon.Rotation = collapsed and 0 or 180 -- down when collapsed, up when expanded
+                items.Visible = not collapsed
+                resize()
+            end)
 
             local Section = { Holder = holder }
             function Section:SetVisible(v) holder.Visible = v and true or false end
@@ -2023,8 +2053,8 @@ function Library:CreateWindow(cfg)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
-                    valueLabel.AnchorPoint = Vector2.new(0.5, 0)
-                    valueLabel.Position = UDim2.new(a, 0, 1, 2)
+                    valueLabel.AnchorPoint = Vector2.new(0.5, 1)
+                    valueLabel.Position = UDim2.new(a, 0, 0, -2)
                     valueLabel.Text = format(value)
                 end
                 function obj:Set(x)
@@ -2107,7 +2137,8 @@ function Library:CreateWindow(cfg)
                     ZIndex = 9,
                     Parent = head,
                 })
-                local arrow = triangleArrow(arrowHolder, 8, 4, Theme.TextDim)
+                local arrow, arrowSq = triangleArrow(arrowHolder, 8, 4, Theme.Accent)
+                onAccent(function() arrowSq.BackgroundColor3 = Theme.Accent end)
 
                 local list = makePanel(ctx, 100, 0)
                 -- arrow flips: pointing down when closed, up when open
