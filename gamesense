@@ -80,9 +80,7 @@ end
 local ICONS = { "110384580770025", "8547249956", "8547254518", "8547256547", "8547258459", "98519046048197" }
 Library.Icons = ICONS
 
--- on-screen size of each icon (px). gamesense uses native sized icons, so they are NOT all the same size.
--- index = position in ICONS (1 headshot, 2 crosshair, 3 sun, 4 gear, 5 karambit, 6 save).
--- these are estimates - if one looks too big / small just change its number.
+-- on-screen size of each built-in icon (px), index = position in ICONS
 Library.IconSizes = { [1] = 38, [2] = 56, [3] = 60, [4] = 52, [5] = 52, [6] = 46 }
 
 local ICON_NAMES = {
@@ -95,8 +93,7 @@ local ICON_NAMES = {
 }
 Library.IconNames = ICON_NAMES
 
--- icons can also be a link to a .png (e.g. a raw GitHub link) or a local file in your executor's workspace.
--- the png gets downloaded once and loaded with getcustomasset, so no Roblox upload / moderation is needed.
+-- icons can also be a link to a .png or a local file in your executor's workspace.
 local iconCache = {}
 local function fileIcon(src)
     if iconCache[src] then return iconCache[src] end
@@ -145,41 +142,35 @@ local Theme = {
     CheckOff   = Color3.fromRGB(52, 52, 52),
     Border     = Color3.fromRGB(45, 45, 45),
     Frame      = Color3.fromRGB(58, 58, 58),
-    -- window frame shading, outside -> inside (measured from gamesense): 12 | 25 40 40 60 | 12
     FrameShades = {
         Color3.fromRGB(25, 25, 25), Color3.fromRGB(40, 40, 40),
         Color3.fromRGB(40, 40, 40), Color3.fromRGB(60, 60, 60),
     },
-    TabLine    = Color3.fromRGB(40, 40, 40),   -- selected tab: inner top / bottom line
-    TabDivider = Color3.fromRGB(45, 45, 45),   -- grey line between the tab column and the page
+    TabLine    = Color3.fromRGB(40, 40, 40),
+    TabDivider = Color3.fromRGB(45, 45, 45),
     Outline    = Color3.fromRGB(0, 0, 0),
     Text       = Color3.fromRGB(200, 200, 200),
     Title      = Color3.fromRGB(225, 225, 225),
     TextDim    = Color3.fromRGB(140, 140, 140),
-    Arrow      = Color3.fromRGB(190, 190, 190),   -- dropdown arrow (white-grey)
+    Arrow      = Color3.fromRGB(190, 190, 190),
     Accent     = Color3.fromRGB(149, 184, 6),
     ScrollBar  = Color3.fromRGB(72, 72, 72),
 
-    -- flat controls (buttons, textboxes, lists, checkboxes, sliders, colour boxes)
     Control        = Color3.fromRGB(28, 28, 28),
-    ControlOutline = Color3.fromRGB(10, 10, 10),   -- ONE value for every control outline
-    OutlineTransparency = 0.55,                    -- how faint every control's border is
+    ControlOutline = Color3.fromRGB(10, 10, 10),
+    OutlineTransparency = 0.55,
     SliderBack     = Color3.fromRGB(30, 30, 30),
 
-    TabIcon         = Color3.fromRGB(87, 87, 87),     -- unselected icon
+    TabIcon         = Color3.fromRGB(87, 87, 87),
     TabIconHover    = Color3.fromRGB(150, 150, 150),
-    TabIconSelected = Color3.fromRGB(210, 210, 210),  -- selected icon (gamesense is 210, not pure white)
+    TabIconSelected = Color3.fromRGB(210, 210, 210),
 
-    -- the tab column (darker than the page)
     TabIdle = Color3.fromRGB(12, 12, 12),
 
-    -- fallback fonts (Enum.Font.Verdana does not exist in Roblox).
-    -- If verdana.ttf / verdanab.ttf are found, every text object is switched to them automatically.
     Font     = Enum.Font.Arial,
     FontBold = Enum.Font.ArialBold,
     TextSize = 10,
 
-    -- page background texture (the selected tab uses the same one)
     Texture = "rbxassetid://8547666218",
     TextureBase = Color3.fromRGB(20, 20, 20),
     TextureColor = Color3.fromRGB(12, 12, 12),
@@ -188,8 +179,24 @@ local Theme = {
 }
 Library.Theme = Theme
 
--- special value: draws the gamesense style watermark
--- (any other string passed to SetWatermark still works as a plain template with {name} {fps} {ping} {time} {config})
+-- fixed layout sizes
+local TAB_WIDTH      = 74
+local TAB_HEIGHT     = 64
+local TAB_GAP_TOP    = 9
+local SECTION_GAP    = 14
+local INDENT         = 15
+local RESERVE        = 40
+local BUTTON_H       = 16
+local BUTTON_GAP     = 3
+local TEXTBOX_H      = 16
+local DROPDOWN_H     = 16
+local LIST_ROW_H     = 16
+local SLIDER_H       = 5
+local CHECK_SIZE     = 7
+local COLOR_W        = 15
+local COLOR_H        = 7
+local COLOR_SHADE    = 175
+
 local DEFAULT_WATERMARK = "{gamesense}"
 
 -- ───────────────────────── helpers ─────────────────────────
@@ -214,14 +221,13 @@ local function stroke(parent, color, thickness, transparency)
     })
 end
 
-
 local function shade(c, m)
     return Color3.new(c.R * m, c.G * m, c.B * m)
 end
 
--- pixel drawn triangle arrow (no font or download needed)
+-- pixel drawn triangle arrow
 local function makeArrow(parent, props)
-    local W, H = 3, 2   -- tiny arrow (try 5, 3 for a bit bigger)
+    local W, H = 3, 2
     local z = props.ZIndex or 9
     local holder = new("Frame", {
         Size = UDim2.fromOffset(W, H),
@@ -257,16 +263,12 @@ local function makeArrow(parent, props)
     return obj
 end
 
--- watermark colours (gamesense style)
-local WM_VALUE = Color3.fromRGB(231, 226, 54)   -- yellow numbers (fps / ping)
-local WM_SMALL = Color3.fromRGB(205, 205, 205)  -- the small FPS / PING labels + config name
+local WM_VALUE = Color3.fromRGB(231, 226, 54)
+local WM_SMALL = Color3.fromRGB(205, 205, 205)
 
--- font + size shared by the watermark AND the keybind list.
--- (replaced by Verdana automatically when verdana.ttf is loaded)
 local OVERLAY_FONT = Enum.Font.SourceSans
 local OVERLAY_SIZE = 12
 
--- soft fade behind the watermark / keybind list (the edges fade out like in gamesense)
 local OVERLAY_FADE = NumberSequence.new({
     NumberSequenceKeypoint.new(0,    0.92),
     NumberSequenceKeypoint.new(0.18, 0.22),
@@ -400,11 +402,10 @@ local function makeDraggable(handle, target, track, scaler)
     end))
 end
 
--- ── the static gradient line on top of the window ──
 local DEFAULT_LINE = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),   -- blue
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),   -- purple / pink
-    ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),   -- yellow
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(55, 177, 218)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(203, 70, 205)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(204, 227, 53)),
 })
 
 local function gradientLine(parent)
@@ -565,7 +566,7 @@ local function makeKeybind(container, key, mode, callback, ctx, name)
                 btn.Text = keyText(key)
                 btn.TextColor3 = Theme.TextDim
                 if obj.KeyChanged then obj.KeyChanged(key) end
-                changed() -- refresh the keybind list immediately
+                changed()
             end
             return
         end
@@ -606,9 +607,8 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
     local h, s, v = color:ToHSV()
     local alpha = 1
 
-    -- small flat colour box (15x7) with the shared control outline
     local box = new("TextButton", {
-        Size = UDim2.fromOffset(15, 7),
+        Size = UDim2.fromOffset(COLOR_W, COLOR_H),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
         Text = "",
@@ -617,10 +617,10 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = container,
     })
     stroke(box, Theme.ControlOutline, 1, Theme.OutlineTransparency)
-    shine(box, 60)
+    shine(box, COLOR_SHADE)
 
     local PAD, SVS, HUEW = 4, 150, 12
-    local FULLW = SVS + 4 + HUEW            -- width of the bars under the square
+    local FULLW = SVS + 4 + HUEW
     local W = PAD * 2 + FULLW
     local H = PAD + SVS + 4 + (hasAlpha and 12 or 0) + 8 + PAD
     local pop = makePanel(ctx, W, H)
@@ -650,7 +650,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         Parent = sv,
     })
     new("UIGradient", { Transparency = NumberSequence.new(1, 0), Rotation = 90, Parent = black })
-    -- dragger: a small square dot (no UICorner)
     local svCursor = new("Frame", {
         Size = UDim2.fromOffset(4, 4),
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -718,7 +717,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
             Parent = pop,
         })
         stroke(alphaBar, Theme.Outline, 1)
-        -- transparency checkerboard (4px squares) behind the colour fade
         for cx = 0, math.ceil(FULLW / 4) - 1 do
             for cy = 0, 1 do
                 new("Frame", {
@@ -751,7 +749,6 @@ local function makeColorPicker(container, default, hasAlpha, callback, ctx)
         nextY = nextY + 12
     end
 
-    -- solid preview bar at the bottom
     local preview = new("Frame", {
         Position = UDim2.fromOffset(PAD, nextY),
         Size = UDim2.fromOffset(FULLW, 8),
@@ -846,10 +843,10 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local bind = cfg.Bind or Enum.KeyCode.RightShift
     local size = cfg.Size or Vector2.new(660, 560)
-    local TAB_W = 74      -- tab column width (incl. the 2px divider)
-    local TAB_H = 64      -- height of each tab
-    local TAB_ICON = 36   -- icon size inside each tab
-    local TAB_TOP = 9     -- gap between the gradient line and the first tab
+    local TAB_W = TAB_WIDTH
+    local TAB_H = TAB_HEIGHT
+    local TAB_ICON = 36
+    local TAB_TOP = TAB_GAP_TOP
     local hasTitle = cfg.Title and cfg.Title ~= ""
     local HEADER = hasTitle and 14 or 10
 
@@ -868,8 +865,6 @@ function Library:CreateWindow(cfg)
     local conns = {}
     local function track(c) conns[#conns + 1] = c return c end
 
-    -- ── apply the custom font to every text object (including ones created later) ──
-    -- Elements that asked for Enum.Font.ArialBold get the Verdana Bold face, everything else gets Regular.
     if Library.FontFace then
         local fontFace = Library.FontFace
         local boldFace = Library.FontFaceBold or fontFace
@@ -902,20 +897,19 @@ function Library:CreateWindow(cfg)
     end
 
     local accentUpdaters = {}
-    local resizers = {}   -- every section height function (re-run when the menu scale changes)
+    local resizers = {}
     local function onAccent(fn) accentUpdaters[#accentUpdaters + 1] = fn end
 
     local outer = new("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(size.X, size.Y),
         Position = UDim2.new(0.5, -size.X / 2, 0.5, -size.Y / 2),
-        BackgroundColor3 = Theme.Background,        -- outermost pixel
+        BackgroundColor3 = Theme.Background,
         BorderSizePixel = 0,
         Parent = gui,
     })
     local uiScale = new("UIScale", { Parent = outer })
 
-    -- window frame (same shading as gamesense): 12 | 25 | 40 | 40 | 60 | 12
     local ring = outer
     local shades = {}
     for _, c in ipairs(Theme.FrameShades) do shades[#shades + 1] = c end
@@ -1004,7 +998,7 @@ function Library:CreateWindow(cfg)
         Parent = notifyLayer,
     })
 
-    -- ── watermark (gamesense style: faded background, no top line) ──
+    -- ── watermark ──
     local wm = new("Frame", {
         Name = "Watermark",
         AutomaticSize = Enum.AutomaticSize.X,
@@ -1020,7 +1014,6 @@ function Library:CreateWindow(cfg)
     })
     new("UIGradient", { Transparency = OVERLAY_FADE, Parent = wm })
 
-    -- rich text label (several colours in one label) + a plain black shadow behind it
     local wmShadow = new("TextLabel", {
         BackgroundTransparency = 1,
         RichText = false,
@@ -1052,7 +1045,7 @@ function Library:CreateWindow(cfg)
     padLabel(wmText, wmShadow, { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16) })
 
     local wmTemplate
-    local currentConfig = "default" -- name of the config in use (shown in the watermark)
+    local currentConfig = "default"
     local fpsAvg, fpsAcc, fpsN = 60, 0, 0
     local function pingMs()
         local ok, v = pcall(function()
@@ -1074,13 +1067,11 @@ function Library:CreateWindow(cfg)
                 return string.format('<font size="%d" color="%s">%s</font>', smallSize, dim, t)
             end
 
-            -- gamesense  <config>  188 FPS  44 PING  14:28:21
             rich = string.format(
                 '<b>game<font color="%s">sense</font></b>   <font color="%s">%s</font>   <font color="%s"><b>%s</b></font> %s   <font color="%s"><b>%s</b></font> %s   %s',
                 hex(Theme.Accent), dim, currentConfig, yellow, fps, small("FPS"), yellow, ping, small("PING"), os.date("%H:%M:%S")
             )
         else
-            -- custom template: same placeholders as before (+ {config})
             rich = (wmTemplate:gsub("{(%w+)}", function(k)
                 k = k:lower()
                 if k == "fps" then return tostring(math.floor(fpsAvg + 0.5))
@@ -1093,13 +1084,11 @@ function Library:CreateWindow(cfg)
         end
 
         wmText.Text = rich
-        wmShadow.Text = (rich:gsub("<[^>]*>", "")) -- the shadow is plain text, so strip the tags
+        wmShadow.Text = (rich:gsub("<[^>]*>", ""))
     end
 
-    -- "sense" follows the menu accent colour
     onAccent(function() renderWm() end)
 
-    -- tab column: solid colour, fully opaque
     local tabBg = new("Frame", {
         Name = "TabColumn",
         Size = UDim2.new(0, TAB_W, 1, -TOP),
@@ -1111,7 +1100,6 @@ function Library:CreateWindow(cfg)
         Parent = inner,
     })
 
-    -- 2px divider on the right edge of the tab column: black, then grey (the selected tab covers it)
     new("Frame", {
         Name = "TabDividerDark",
         Position = UDim2.new(1, -2, 0, 0),
@@ -1131,7 +1119,6 @@ function Library:CreateWindow(cfg)
         Parent = tabBg,
     })
 
-    -- page area (no border line between the tabs and the page)
     local content = new("Frame", {
         Size = UDim2.new(1, -TAB_W, 1, -TOP),
         Position = UDim2.fromOffset(TAB_W, TOP),
@@ -1191,7 +1178,7 @@ function Library:CreateWindow(cfg)
         ZIndex = 21,
     })
 
-    -- ── keybind list (same faded background + same font as the watermark) ──
+    -- ── keybind list ──
     local kbEntries = {}
     local kbEnabled = cfg.KeybindList == true
     local kbFrame = new("Frame", {
@@ -1367,7 +1354,6 @@ function Library:CreateWindow(cfg)
         s = math.clamp(tonumber(s) or 1, 0.3, 3)
         uiScale.Scale = s
         closePopup()
-        -- AbsoluteContentSize updates a frame later, so re-measure after that
         task.defer(function()
             for _ = 1, 2 do
                 for _, fn in ipairs(resizers) do pcall(fn) end
@@ -1392,7 +1378,6 @@ function Library:CreateWindow(cfg)
         end
     end
 
-    -- name of the config shown in the watermark (set automatically when you save / load one)
     function Window:SetConfigName(n)
         currentConfig = (n ~= nil and tostring(n) ~= "") and tostring(n) or "default"
         if wmTemplate and wm.Visible then renderWm() end
@@ -1561,14 +1546,12 @@ function Library:CreateWindow(cfg)
         local name = opts.Name or "Tab"
         local icon = resolveIcon(opts.Icon ~= nil and opts.Icon or ICONS[#Window.Tabs + 1])
 
-        -- which built-in icon is this? (decides its size)
         local iconIndex = opts.Icon
         if type(iconIndex) == "string" then iconIndex = ICON_NAMES[iconIndex:lower()] end
         if iconIndex == nil then iconIndex = #Window.Tabs + 1 end
         if type(iconIndex) ~= "number" then iconIndex = nil end
-        local iconSize = opts.IconSize or (iconIndex and Library.IconSizes[iconIndex]) or TAB_ICON
+        local iconSize = (iconIndex and Library.IconSizes[iconIndex]) or TAB_ICON
 
-        -- click area only
         local btn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, TAB_H),
             BackgroundTransparency = 1,
@@ -1580,7 +1563,6 @@ function Library:CreateWindow(cfg)
             Parent = tabBar,
         })
 
-        -- unselected: fully transparent, you just see the dark tab column
         local idleBox = new("Frame", {
             Name = "Idle",
             Size = UDim2.new(1, 0, 1, 0),
@@ -1590,10 +1572,7 @@ function Library:CreateWindow(cfg)
             Parent = btn,
         })
 
-        -- selected: shows the SAME tiled texture as the page, lined up with it, so the tab
-        -- looks cut out of the page (gamesense style). Sticks out 1px so it opens into the page
-        -- and covers the divider.
-        local tabIndex = #Window.Tabs  -- 0-based position of this tab (it isn't inserted yet)
+        local tabIndex = #Window.Tabs
 
         local selBox = new("Frame", {
             Name = "Selected",
@@ -1610,10 +1589,8 @@ function Library:CreateWindow(cfg)
 
         do
             local tile = Theme.TextureTile
-            -- page texture starts at x = TAB_W; shift left by a whole number of tiles
-            -- so the tile pattern still matches the page exactly
             local xOff = TAB_W - tile * math.ceil(TAB_W / tile)
-            local yOff = -(TAB_TOP + tabIndex * TAB_H)   -- page texture origin, relative to this tab
+            local yOff = -(TAB_TOP + tabIndex * TAB_H)
 
             new("ImageLabel", {
                 Name = "TabTexture",
@@ -1630,11 +1607,9 @@ function Library:CreateWindow(cfg)
                 Parent = selBox,
             })
 
-            -- 2px lines on the top and bottom edges of the selected tab:
-            -- top = black then grey, bottom = grey then black
-            local function tline(name, y, h, c)
+            local function tline(lname, y, h, c)
                 new("Frame", {
-                    Name = name,
+                    Name = lname,
                     Position = y,
                     Size = UDim2.new(1, 0, 0, h),
                     BackgroundColor3 = c,
@@ -1643,10 +1618,10 @@ function Library:CreateWindow(cfg)
                     Parent = selBox,
                 })
             end
-            tline("TopDark",    UDim2.fromOffset(0, 0),      1, Theme.Outline)
-            tline("TopLight",   UDim2.fromOffset(0, 1),      1, Theme.TabLine)
-            tline("BottomLight", UDim2.new(0, 0, 1, -2),     1, Theme.TabLine)
-            tline("BottomDark",  UDim2.new(0, 0, 1, -1),     1, Theme.Outline)
+            tline("TopDark",     UDim2.fromOffset(0, 0),  1, Theme.Outline)
+            tline("TopLight",    UDim2.fromOffset(0, 1),  1, Theme.TabLine)
+            tline("BottomLight", UDim2.new(0, 0, 1, -2),  1, Theme.TabLine)
+            tline("BottomDark",  UDim2.new(0, 0, 1, -1),  1, Theme.Outline)
         end
 
         local img
@@ -1681,7 +1656,7 @@ function Library:CreateWindow(cfg)
             Parent = content,
         })
 
-        local CAT_H, PANE_TOP = 52, 66   -- category box height / where the columns start under it
+        local CAT_H, PANE_TOP = 52, 66
 
         local function makeColumn(parent, xScale, xOff)
             local col = new("ScrollingFrame", {
@@ -1698,13 +1673,12 @@ function Library:CreateWindow(cfg)
             })
             new("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 14),
+                Padding = UDim.new(0, SECTION_GAP),
                 Parent = col,
             })
             return col
         end
 
-        -- a "pane" = one left + right column pair (every category gets its own)
         local function makePane(top)
             local f = new("Frame", {
                 Position = UDim2.fromOffset(0, top),
@@ -1718,7 +1692,6 @@ function Library:CreateWindow(cfg)
 
         local defaultPane = makePane(0)
 
-        -- category box (gamesense style: a titled box with icon-only buttons)
         local catBar = new("Frame", {
             Name = "Categories",
             Position = UDim2.fromOffset(24, 12),
@@ -1895,16 +1868,14 @@ function Library:CreateWindow(cfg)
                 Padding = UDim.new(0, 1),
                 Parent = items,
             })
-            -- height of the rows, measured from the rows themselves (their unscaled Size offsets), so it
-            -- is correct at ANY menu scale. (AbsoluteContentSize is in scaled screen pixels and was
-            -- making the boxes too short.)
+
             local function contentHeight()
                 local total, n = 0, 0
                 for _, c in ipairs(items:GetChildren()) do
                     if c:IsA("GuiObject") and c.Visible then
                         local hgt
                         if c.AutomaticSize == Enum.AutomaticSize.Y or c.AutomaticSize == Enum.AutomaticSize.XY then
-                            hgt = c.AbsoluteSize.Y / uiScale.Scale   -- wrapped text (AddInfo)
+                            hgt = c.AbsoluteSize.Y / uiScale.Scale
                         else
                             hgt = c.Size.Y.Offset
                         end
@@ -1912,7 +1883,7 @@ function Library:CreateWindow(cfg)
                         n += 1
                     end
                 end
-                return total + math.max(n - 1, 0) * 1   -- 1px padding between rows
+                return total + math.max(n - 1, 0) * 1
             end
 
             local function resize()
@@ -1943,11 +1914,9 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
             end
-            local INDENT = 15
-            local RESERVE = 40
 
             local function reg(kind, text, obj)
-                if name == "Config" and secName ~= "Menu" then return end
+                if name == "Config" then return end
                 register(flagRoot .. "/" .. secName .. "/" .. text, kind, obj)
             end
 
@@ -1991,8 +1960,8 @@ function Library:CreateWindow(cfg)
                     Parent = items,
                 })
                 local check = new("Frame", {
-                    Size = UDim2.fromOffset(7, 7),
-                    Position = UDim2.fromOffset(1, 3),
+                    Size = UDim2.fromOffset(CHECK_SIZE, CHECK_SIZE),
+                    Position = UDim2.fromOffset(1, math.floor((14 - CHECK_SIZE) / 2)),
                     BackgroundColor3 = Color3.new(1, 1, 1),
                     BorderSizePixel = 0,
                     ZIndex = 8,
@@ -2017,7 +1986,6 @@ function Library:CreateWindow(cfg)
                 paint()
                 onAccent(paint)
 
-                -- hovering the row no longer changes the label's own text colour
                 local obj = {}
                 function obj:Set(v)
                     state = v and true or false
@@ -2057,7 +2025,7 @@ function Library:CreateWindow(cfg)
                 end
                 local value = snap(default or min)
 
-                local holder2 = row(32)
+                local holder2 = row(27 + SLIDER_H)
                 local lbl = label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
@@ -2065,7 +2033,7 @@ function Library:CreateWindow(cfg)
                 })
                 local bar = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 15),
-                    Size = UDim2.new(1, -RESERVE, 0, 5),
+                    Size = UDim2.new(1, -RESERVE, 0, SLIDER_H),
                     BackgroundColor3 = Theme.SliderBack,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2089,7 +2057,6 @@ function Library:CreateWindow(cfg)
                 paintFill()
                 onAccent(paintFill)
 
-                -- value text rides the end of the fill (gamesense style)
                 local valueLabel = label(bar, "", {
                     NoShadow = true,
                     AutomaticSize = Enum.AutomaticSize.X,
@@ -2111,8 +2078,6 @@ function Library:CreateWindow(cfg)
                 local function render()
                     local a = (max == min) and 0 or (value - min) / (max - min)
                     fill.Size = UDim2.new(a, 0, 1, 0)
-                    -- the value sits under the end of the fill, half over the bar,
-                    -- and stays inside the bar at both ends
                     valueLabel.AnchorPoint = Vector2.new(a, 0.5)
                     valueLabel.Position = UDim2.new(a, 0, 0.5, 4)
                     valueLabel.Text = format(value)
@@ -2163,8 +2128,8 @@ function Library:CreateWindow(cfg)
                     selectedValue = default or options[1]
                 end
 
-                local ROW, MAXROWS = 16, 10
-                local holder2 = row(31)
+                local ROW, MAXROWS = LIST_ROW_H, 10
+                local holder2 = row(15 + DROPDOWN_H)
                 label(holder2, text, {
                     Position = UDim2.fromOffset(INDENT, 0),
                     Size = UDim2.new(1, -RESERVE, 0, 12),
@@ -2172,7 +2137,7 @@ function Library:CreateWindow(cfg)
                 })
                 local head = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 14),
-                    Size = UDim2.new(1, -RESERVE, 0, 16),
+                    Size = UDim2.new(1, -RESERVE, 0, DROPDOWN_H),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2189,11 +2154,9 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     ZIndex = 9,
                 })
-                -- white-grey arrow drawn from pixels (works with any font)
                 local arrow = makeArrow(head, { Position = UDim2.new(1, -10, 0.5, 0), ZIndex = 9 })
 
                 local list = makePanel(ctx, 100, 0)
-                -- arrow flips: down when closed, up when open
                 list:GetPropertyChangedSignal("Visible"):Connect(function()
                     arrow:SetDirection(list.Visible)
                 end)
@@ -2313,7 +2276,7 @@ function Library:CreateWindow(cfg)
                 callback = callback or function() end
                 options = options or {}
                 rows = rows or 6
-                local ROW = 16
+                local ROW = LIST_ROW_H
                 local hasLabel = text ~= nil and text ~= ""
                 local top = hasLabel and 15 or 2
                 local onChanged, fire = emitter()
@@ -2337,7 +2300,7 @@ function Library:CreateWindow(cfg)
                 end
                 local box = new("Frame", {
                     Position = UDim2.fromOffset(INDENT, top),
-                    Size = UDim2.new(1, -RESERVE, 0, rows * ROW + 2),
+                    Size = UDim2.new(1, -INDENT, 0, rows * ROW + 2),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     ZIndex = 8,
@@ -2487,10 +2450,10 @@ function Library:CreateWindow(cfg)
 
             function Section:AddButton(text, callback)
                 callback = callback or function() end
-                local r = row(18)
+                local r = row(BUTTON_H + BUTTON_GAP)
                 local b = new("TextButton", {
                     Position = UDim2.fromOffset(INDENT, 0),
-                    Size = UDim2.new(1, -RESERVE, 1, 0),
+                    Size = UDim2.new(1, -INDENT, 0, BUTTON_H),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = "",
@@ -2508,6 +2471,7 @@ function Library:CreateWindow(cfg)
                 b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(44, 44, 44) end)
                 b.MouseLeave:Connect(function() b.BackgroundColor3 = Theme.Element end)
                 b.MouseButton1Click:Connect(function() task.spawn(callback) end)
+
                 local obj = { Instance = b }
                 function obj:SetText(t) bl.Text = t end
                 return vis(obj, r)
@@ -2566,12 +2530,16 @@ function Library:CreateWindow(cfg)
                 return vis(obj, r)
             end
 
-            -- text = "" gives a label-less box (search style). live = true fires the callback on every keystroke
-            -- and adds a small "x" clear button.
+            -- text = "" gives a label-less box (search style). live = true fires the callback
+            -- on every keystroke and adds a small magnifying glass on the right.
+            -- The box is RESERVE px narrower than the row, same as the dropdowns and sliders.
             function Section:AddTextbox(text, default, callback, live)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
-                local r = row(hasLabel and 33 or 20)
+                local GAP = hasLabel and 3 or 2
+                local TOP = hasLabel and 14 or 2
+
+                local r = row(TOP + TEXTBOX_H + GAP)
                 if hasLabel then
                     label(r, text, {
                         Position = UDim2.fromOffset(INDENT, 0),
@@ -2580,8 +2548,8 @@ function Library:CreateWindow(cfg)
                     })
                 end
                 local tb = new("TextBox", {
-                    Position = UDim2.fromOffset(INDENT, hasLabel and 14 or 2),
-                    Size = UDim2.new(1, -RESERVE, 0, 16),
+                    Position = UDim2.fromOffset(INDENT, TOP),
+                    Size = UDim2.new(1, -RESERVE, 0, TEXTBOX_H),
                     BackgroundColor3 = Theme.Element,
                     BorderSizePixel = 0,
                     Text = default or "",
@@ -2601,18 +2569,39 @@ function Library:CreateWindow(cfg)
 
                 if live then
                     tb:GetPropertyChangedSignal("Text"):Connect(function() task.spawn(callback, tb.Text) end)
-                    local x = new("TextButton", {
-                        Position = UDim2.new(1, -14, 0, 0),
-                        Size = UDim2.fromOffset(14, 16),
+
+                    local ico = new("Frame", {
+                        Name = "SearchIcon",
+                        Size = UDim2.fromOffset(6, 6),
+                        Position = UDim2.new(1, -RESERVE - 14, 0, TOP + math.floor((TEXTBOX_H - 6) / 2)),
                         BackgroundTransparency = 1,
-                        Text = "x",
-                        TextColor3 = Theme.TextDim,
-                        Font = Theme.Font,
-                        TextSize = 9,
                         ZIndex = 9,
-                        Parent = tb,
+                        Parent = r,
                     })
-                    x.MouseButton1Click:Connect(function() tb.Text = "" end)
+                    local lens = new("Frame", {
+                        Size = UDim2.fromOffset(4, 4),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                        ZIndex = 9,
+                        Parent = ico,
+                    })
+                    new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = lens })
+                    local lensStroke = stroke(lens, Theme.TextDim, 1)
+                    local handle = new("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Position = UDim2.fromOffset(5, 5),
+                        Size = UDim2.fromOffset(1, 2),
+                        Rotation = -45,
+                        BackgroundColor3 = Theme.TextDim,
+                        BorderSizePixel = 0,
+                        ZIndex = 9,
+                        Parent = ico,
+                    })
+                    tb:GetPropertyChangedSignal("Text"):Connect(function()
+                        local c = (tb.Text ~= "") and Theme.Text or Theme.TextDim
+                        lensStroke.Color = c
+                        handle.BackgroundColor3 = c
+                    end)
                 else
                     tb.FocusLost:Connect(function() task.spawn(callback, tb.Text) end)
                 end
@@ -2687,7 +2676,6 @@ function Library:CreateWindow(cfg)
                 })
                 tint = function(c) cbtn.ImageColor3 = c end
             else
-                -- no icon given: fall back to a bold title-coloured text button
                 cbtn = new("TextButton", {
                     AutomaticSize = Enum.AutomaticSize.X,
                     Size = UDim2.fromOffset(0, CAT_SIZE),
@@ -2704,7 +2692,6 @@ function Library:CreateWindow(cfg)
                 tint = function(c) cbtn.TextColor3 = c end
             end
 
-            -- the category name shows as a tooltip when you hover the icon
             ctx.addTip(cbtn).Text = catName
 
             local Category = { Name = catName, Pane = pane, Button = cbtn, Tint = tint }
@@ -2736,8 +2723,6 @@ function Library:CreateWindow(cfg)
             return false
         end
 
-        -- Tab:AddSection: goes to the most recently created category,
-        -- or to the plain page when the tab has no categories
         function Tab:AddSection(secName, side, height)
             local target = categories[#categories]
             if target then
@@ -2767,7 +2752,7 @@ function Library:CreateWindow(cfg)
             if nameBox and v then nameBox:Set(v) end
         end, 10)
 
-        presets:AddSpacer(10)
+        presets:AddSpacer(4)
         nameBox = presets:AddTextbox("Config name", "default")
 
         presets:AddButton("Load", function()
