@@ -185,7 +185,7 @@ local TAB_HEIGHT     = 64
 local TAB_GAP_TOP    = 9
 local SECTION_GAP    = 14
 local INDENT         = 15
-local RESERVE        = 40
+local RESERVE        = INDENT   -- every control now ends at the same right edge as the buttons
 local BUTTON_H       = 16
 local BUTTON_GAP     = 3
 local TEXTBOX_H      = 16
@@ -2532,7 +2532,7 @@ function Library:CreateWindow(cfg)
 
             -- text = "" gives a label-less box (search style). live = true fires the callback
             -- on every keystroke and adds a small magnifying glass on the right.
-            -- The box is RESERVE px narrower than the row, same as the dropdowns and sliders.
+            -- The box ends at the same right edge as the buttons and the listbox.
             function Section:AddTextbox(text, default, callback, live)
                 callback = callback or function() end
                 local hasLabel = text ~= nil and text ~= ""
@@ -2573,7 +2573,7 @@ function Library:CreateWindow(cfg)
                     local ico = new("Frame", {
                         Name = "SearchIcon",
                         Size = UDim2.fromOffset(6, 6),
-                        Position = UDim2.new(1, -RESERVE - 14, 0, TOP + math.floor((TEXTBOX_H - 6) / 2)),
+                        Position = UDim2.new(1, -13, 0, TOP + math.floor((TEXTBOX_H - 6) / 2)),
                         BackgroundTransparency = 1,
                         ZIndex = 9,
                         Parent = r,
@@ -2619,8 +2619,8 @@ function Library:CreateWindow(cfg)
             function Section:AddSeparator()
                 local r = row(8)
                 new("Frame", {
-                    Position = UDim2.new(0, 0, 0.5, 0),
-                    Size = UDim2.new(1, 0, 0, 1),
+                    Position = UDim2.new(0, INDENT, 0.5, 0),
+                    Size = UDim2.new(1, -INDENT, 0, 1),
                     BackgroundColor3 = Theme.Border,
                     BorderSizePixel = 0,
                     ZIndex = 8,
